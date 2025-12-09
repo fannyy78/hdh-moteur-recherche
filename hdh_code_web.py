@@ -768,7 +768,7 @@ with col_btn1:
 
 with col_btn2:
     if st.button("🔄 Réinitialiser", use_container_width=True):
-        # Réinitialiser TOUS les filtres
+        # Réinitialiser TOUS les filtres et états
         st.session_state.selected_types = ["TOUT"]
         st.session_state.selected_aires = ["TOUT"]
         st.session_state.selected_sources = ["TOUT"]
@@ -780,8 +780,13 @@ with col_btn2:
         st.session_state.current_results = None
         st.session_state.show_article = False
         st.session_state.selected_article_index = None
-
-        # Forcer le rechargement de la page pour appliquer la réinitialisation
+        
+        # Réinitialiser aussi les clés des widgets pour forcer leur mise à jour
+        for key in list(st.session_state.keys()):
+            if key.endswith('_filter') or key == 'search_global' or key == 'entite_filter_text' or key == 'entite_filter_dropdown' or key == 'status_filter':
+                del st.session_state[key]
+        
+        # Forcer le rechargement de la page
         st.rerun()
 
 with col_btn3:
@@ -1013,4 +1018,5 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
 
