@@ -510,14 +510,6 @@ with col1:
         label_visibility="visible"
     )
     st.session_state.selected_entite_dropdown = selected_entite_dropdown
-    
-    st.markdown('<p class="filter-title">Statut</p>', unsafe_allow_html=True)
-    selected_status = st.selectbox(
-        "Statut",
-        options=["TOUT", "En cours", "Terminé"],
-        key="status_filter",
-        label_visibility="collapsed"
-    )
 
 with col2:
     st.markdown('<p class="filter-title">Aire thérapeutique</p>', unsafe_allow_html=True)
@@ -595,6 +587,15 @@ with col3:
     elif len(selected_sources) == 0:
         selected_sources = ["TOUT"]
     st.session_state.selected_sources = selected_sources
+    
+    # **DÉPLACÉ : Filtre Statut maintenant en colonne 3, sous Source de données**
+    st.markdown('<p class="filter-title">Statut</p>', unsafe_allow_html=True)
+    selected_status = st.selectbox(
+        "Statut",
+        options=["TOUT", "En cours", "Terminé"],
+        key="status_filter",
+        label_visibility="collapsed"
+    )
 
 st.markdown("---")
 
@@ -858,3 +859,4 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
