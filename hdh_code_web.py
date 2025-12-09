@@ -775,11 +775,25 @@ with col_btn1:
 
 with col_btn2:
     if st.button("🔄 Réinitialiser", use_container_width=True):
-        # Vider complètement le session_state
-        st.session_state.clear()
+        # Réinitialiser explicitement chaque variable du session_state
+        st.session_state.selected_types = ["TOUT"]
+        st.session_state.selected_aires = ["TOUT"]
+        st.session_state.selected_sources = ["TOUT"]
+        st.session_state.selected_finalites = ["TOUT"]
+        st.session_state.selected_objectifs = ["TOUT"]
+        st.session_state.selected_annees = ["TOUT"]
+        st.session_state.entite_search = ""
+        st.session_state.selected_entite_dropdown = []
+        st.session_state.current_results = None
+        st.session_state.show_article = False
+        st.session_state.selected_article_index = None
+        
+        # Réinitialiser les champs de recherche textuelle
+        st.session_state.search_global = ""
+        st.session_state.entite_filter_text = ""
         
         # Message de confirmation
-        st.success("🔄 Application réinitialisée !")
+        st.success("🔄 Tous les filtres ont été réinitialisés !")
         
         # Forcer le rechargement
         st.rerun()
@@ -1013,6 +1027,7 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
 
 
 
