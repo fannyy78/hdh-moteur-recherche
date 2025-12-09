@@ -797,65 +797,65 @@ with col_btn2:
 
 st.markdown("---")
 
-        # Affichage de l'article sélectionné
-        if st.session_state.show_article and st.session_state.selected_article_index:
-            try:
-                article_row = st.session_state.current_results[
-                    st.session_state.current_results["Référence"] == st.session_state.selected_article_index
-                ].iloc[0]
+    # Affichage de l'article sélectionné
+    if st.session_state.show_article and st.session_state.selected_article_index:
+        try:
+            article_row = st.session_state.current_results[
+                st.session_state.current_results["Référence"] == st.session_state.selected_article_index
+            ].iloc[0]
 
-                st.markdown("---")
+            st.markdown("---")
 
-                # En-tête de l'article avec bouton fermer
-                col_title, col_close = st.columns([4, 1])
+            # En-tête de l'article avec bouton fermer
+            col_title, col_close = st.columns([4, 1])
 
-                with col_title:
-                    st.markdown(f"## 📄 Détails de l'article - {st.session_state.selected_article_index}")
+            with col_title:
+                st.markdown(f"## 📄 Détails de l'article - {st.session_state.selected_article_index}")
 
-                with col_close:
-                    if st.button("❌ Fermer", use_container_width=True):
-                        st.session_state.show_article = False
-                        st.session_state.selected_article_index = None
-                        st.rerun()
+            with col_close:
+                if st.button("❌ Fermer", use_container_width=True):
+                    st.session_state.show_article = False
+                    st.session_state.selected_article_index = None
+                    st.rerun()
 
-                # Conteneur avec barre de défilement
-                with st.container():
-                    # Afficher toutes les colonnes du DataFrame
-                    all_columns = list(df.columns)
+            # Conteneur avec barre de défilement
+            with st.container():
+                # Afficher toutes les colonnes du DataFrame
+                all_columns = list(df.columns)
 
-                    for col in all_columns:
-                        if col in article_row.index:
-                            # Titre du champ (en rouge)
-                            st.markdown(f'<div class="article-field-label">{col}</div>', unsafe_allow_html=True)
+                for col in all_columns:
+                    if col in article_row.index:
+                        # Titre du champ (en rouge)
+                        st.markdown(f'<div class="article-field-label">{col}</div>', unsafe_allow_html=True)
 
-                            # Valeur du champ
-                            value = article_row[col]
+                        # Valeur du champ
+                        value = article_row[col]
 
-                            # Vérifier si la valeur est vide ou NaN
-                            if pd.isna(value) or str(value).strip() == "" or str(value).lower() == "nan":
-                                st.markdown('<div class="article-field-empty">Donnée non renseignée</div>', unsafe_allow_html=True)
-                            else:
-                                display_value = str(value)
-                                # Utiliser un fond légèrement coloré pour améliorer la lisibilité
-                                st.markdown(f'<div class="article-field-value">{display_value}</div>', unsafe_allow_html=True)
+                        # Vérifier si la valeur est vide ou NaN
+                        if pd.isna(value) or str(value).strip() == "" or str(value).lower() == "nan":
+                            st.markdown('<div class="article-field-empty">Donnée non renseignée</div>', unsafe_allow_html=True)
+                        else:
+                            display_value = str(value)
+                            # Utiliser un fond légèrement coloré pour améliorer la lisibilité
+                            st.markdown(f'<div class="article-field-value">{display_value}</div>', unsafe_allow_html=True)
 
-                            # Ligne de séparation
-                            st.markdown("---")
+                        # Ligne de séparation
+                        st.markdown("---")
 
-            except IndexError:
-                st.error("❌ Article non trouvé dans les résultats.")
-            except Exception as e:
-                st.error(f"❌ Erreur lors de l'affichage de l'article : {e}")
+        except IndexError:
+            st.error("❌ Article non trouvé dans les résultats.")
+        except Exception as e:
+            st.error(f"❌ Erreur lors de l'affichage de l'article : {e}")
 
-    else:
-        st.info("ℹ️ Aucun résultat trouvé avec les critères sélectionnés.")
+else:
+    st.info("ℹ️ Aucun résultat trouvé avec les critères sélectionnés.")
 
-        # Suggestions pour améliorer la recherche
-        with st.expander("💡 Conseils pour améliorer votre recherche", expanded=False):
-            st.write("• Essayez de réduire le nombre de filtres appliqués")
-            st.write("• Vérifiez l'orthographe de vos termes de recherche")
-            st.write("• Utilisez des mots-clés plus généraux")
-            st.write("• Cliquez sur 'Rechercher' avec moins de filtres pour voir plus de projets")
+    # Suggestions pour améliorer la recherche
+    with st.expander("💡 Conseils pour améliorer votre recherche", expanded=False):
+        st.write("• Essayez de réduire le nombre de filtres appliqués")
+        st.write("• Vérifiez l'orthographe de vos termes de recherche")
+        st.write("• Utilisez des mots-clés plus généraux")
+        st.write("• Cliquez sur 'Rechercher' avec moins de filtres pour voir plus de projets")
 
 else:
     # Message d'accueil quand aucune recherche n'a été effectuée
