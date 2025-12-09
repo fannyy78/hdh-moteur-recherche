@@ -594,16 +594,16 @@ entite_responsable = st.text_input(
     help="Recherche par mot-clé dans les entités"
 )
     
-    # Dropdown de sélection
-    selected_entite_dropdown = st.multiselect(
-        "Sélection directe",
-        options=entites_options,
-        default=st.session_state.selected_entite_dropdown,
-        key="entite_filter_dropdown",
-        label_visibility="collapsed",
-        help="Sélectionnez une ou plusieurs entités"
-    )
-    st.session_state.selected_entite_dropdown = selected_entite_dropdown
+# Dropdown de sélection
+selected_entite_dropdown = st.multiselect(
+    "Sélection directe",
+    options=entites_options,
+    default=st.session_state.selected_entite_dropdown,
+    key="entite_filter_dropdown",
+    label_visibility="collapsed",
+    help="Sélectionnez une ou plusieurs entités"
+)
+st.session_state.selected_entite_dropdown = selected_entite_dropdown
 
 with col2:
     st.markdown('<p class="filter-title">Aire thérapeutique</p>', unsafe_allow_html=True)
@@ -965,6 +965,7 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
 
 
 
