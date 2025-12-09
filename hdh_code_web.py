@@ -599,7 +599,12 @@ def get_filtered_df(query_global, selected_types, selected_aires, selected_sourc
 
 # Section de recherche textuelle
 st.markdown('<div class="sub-header">🔍 Recherche textuelle</div>', unsafe_allow_html=True)
-query_global = st.text_input("Recherche globale dans toutes les colonnes", placeholder="Entrez un mot-clé...", key="search_global")
+query_global = st.text_input(
+    "Recherche globale dans toutes les colonnes", 
+    placeholder="Entrez un mot-clé...", 
+    key="search_global",
+    value=st.session_state.get("search_global", "")
+)
 
 st.markdown("---")
 
@@ -646,12 +651,13 @@ with col1:
     selected_entite_dropdown = st.multiselect(
         "Sélection directe",
         options=entites_options,
-        default=st.session_state.selected_entite_dropdown,
+        default=st.session_state.get("selected_entite_dropdown", []),
         key="entite_filter_dropdown",
         label_visibility="collapsed",
         help="Sélectionnez une ou plusieurs entités"
     )
-    st.session_state.selected_entite_dropdown = selected_entite_dropdown
+    if selected_entite_dropdown != st.session_state.get("selected_entite_dropdown", []):
+        st.session_state.selected_entite_dropdown = selected_entite_dropdown
 
 with col2:
     st.markdown('<p class="filter-title">Aire thérapeutique</p>', unsafe_allow_html=True)
@@ -768,7 +774,24 @@ with col_btn1:
 
 with col_btn2:
     if st.button("🔄 Réinitialiser", use_container_width=True):
-        # Réinitialiser TOUS les filtres et états
+        # Liste de toutes les clés à supprimer
+        keys_to_reset = [
+            'selected_types', 'selected_aires', 'selected_sources', 
+            'selected_finalites', 'selected_objectifs', 'selected_annees',
+            'entite_search', 'selected_entite_dropdown', 'current_results',
+            'show_article', 'selected_article_index',
+            'types_filter', 'aires_filter', 'sources_filter',
+            'finalites_filter', 'objectifs_filter', 'annees_filter',
+            'entite_filter_text', 'entite_filter_dropdown', 'status_filter',
+            'search_global', 'article_selector'
+        ]
+        
+        # Supprimer toutes les clés
+        for key in keys_to_reset:
+            if key in st.session_state:
+                del st.session_state[key]
+        
+        # Réinitialiser les valeurs par défaut
         st.session_state.selected_types = ["TOUT"]
         st.session_state.selected_aires = ["TOUT"]
         st.session_state.selected_sources = ["TOUT"]
@@ -781,12 +804,7 @@ with col_btn2:
         st.session_state.show_article = False
         st.session_state.selected_article_index = None
         
-        # Réinitialiser aussi les clés des widgets pour forcer leur mise à jour
-        for key in list(st.session_state.keys()):
-            if key.endswith('_filter') or key == 'search_global' or key == 'entite_filter_text' or key == 'entite_filter_dropdown' or key == 'status_filter':
-                del st.session_state[key]
-        
-        # Forcer le rechargement de la page
+        # Forcer le rechargement
         st.rerun()
 
 with col_btn3:
@@ -1018,5 +1036,6 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
 
 
