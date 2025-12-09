@@ -85,79 +85,114 @@ with col_refresh2:
         st.cache_data.clear()
         st.rerun()
 
-# ==================== CHARGEMENT DES DONNÉES ====================
-@st.cache_data
+
+# scrapping
 @st.cache_data(ttl=3600)  # Cache pendant 1 heure
 def load_data():
-    # Déterminer le chemin de base
-    base_path = os.path.dirname(__file__)
-    
-    # Ajouter gestion des erreurs
     """
     Charge les données depuis le site HDH en scrapant le lien de téléchargement
     """
     try:
-        file_path = os.path.join(base_path, "repertoire_projets.xlsx")
-        df = pd.read_excel(file_path, engine="openpyxl")
         url = "https://www.health-data-hub.fr/projets"
         
+        # Headers plus complets pour éviter les blocages
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
         }
         
-        st.info("🔄 Récupération des données depuis le site HDH...")
+        st.info("🔄 Récupération de la page HDH...")
         
-        # Récupérer la page
-        response = requests.get(url, headers=headers, timeout=30)
+        # Récupérer la page avec session pour maintenir les cookies
+        session = requests.Session()
+        response = session.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         
         # Parser le HTML
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Chercher le lien de téléchargement Excel
+        # Stratégies multiples pour trouver le lien Excel
         download_link = None
         
-        # Méthode 1: Chercher un lien contenant "xlsx" ou "excel"
-        for link in soup.find_all('a', href=True):
-            href = link['href']
-            if any(ext in href.lower() for ext in ['.xlsx', '.xls', 'excel']):
+        # Stratégie 1: Chercher les liens avec des mots-clés dans le texte
+        st.info("🔍 Recherche du lien de téléchargement...")
+        
+        # Rechercher tous les liens
+        all_links = soup.find_all('a', href=True)
+        
+        for link in all_links:
+            href = link.get('href', '')
+            text = link.get_text(strip=True).lower()
+            
+            # Vérifier si c'est un fichier Excel
+            if any(ext in href.lower() for ext in ['.xlsx', '.xls']):
                 download_link = href
+                st.info(f"✅ Lien Excel trouvé par extension: {href}")
                 break
-        
-        # Méthode 2: Chercher près du texte "Télécharger"
-        if not download_link:
-            download_elements = soup.find_all(text=re.compile(r'télécharger|download', re.IGNORECASE))
-            for element in download_elements:
-                parent = element.parent
-                if parent:
-                    link = parent.find('a', href=True)
-                    if link and any(ext in link['href'].lower() for ext in ['.xlsx', '.xls']):
-                        download_link = link['href']
-                        break
-        
-        # Méthode 3: Chercher dans les boutons ou éléments avec classe download
-        if not download_link:
-            download_buttons = soup.find_all(['a', 'button'], class_=re.compile(r'download|télécharger', re.IGNORECASE))
-            for button in download_buttons:
-                if button.get('href') and any(ext in button['href'].lower() for ext in ['.xlsx', '.xls']):
-                    download_link = button['href']
+            
+            # Vérifier si le texte contient des mots-clés de téléchargement
+            if any(keyword in text for keyword in ['télécharger', 'download', 'excel', 'xlsx']):
+                # Vérifier si le lien pointe vers un fichier ou une page de téléchargement
+                if href and not href.startswith('#'):
+                    download_link = href
+                    st.info(f"✅ Lien trouvé par mot-clé '{text}': {href}")
                     break
         
+        # Stratégie 2: Chercher dans les attributs data-* ou onclick
         if not download_link:
-            st.error("❌ Impossible de trouver le lien de téléchargement Excel sur le site HDH")
+            for element in soup.find_all(['a', 'button', 'div']):
+                for attr_name, attr_value in element.attrs.items():
+                    if isinstance(attr_value, str) and any(ext in attr_value.lower() for ext in ['.xlsx', '.xls']):
+                        download_link = attr_value
+                        st.info(f"✅ Lien trouvé dans l'attribut {attr_name}: {attr_value}")
+                        break
+                if download_link:
+                    break
+        
+        # Stratégie 3: Chercher des patterns spécifiques au site HDH
+        if not download_link:
+            # Chercher des liens vers des fichiers ou APIs
+            for link in all_links:
+                href = link.get('href', '')
+                if any(pattern in href.lower() for pattern in ['/api/', '/download/', '/file/', '/export/']):
+                    # Vérifier si ça pourrait être notre fichier
+                    if 'projet' in href.lower() or 'repertoire' in href.lower():
+                        download_link = href
+                        st.info(f"✅ Lien API/Download trouvé: {href}")
+                        break
+        
+        if not download_link:
+            st.error("❌ Impossible de trouver le lien de téléchargement Excel")
+            st.info("🔍 Liens trouvés sur la page:")
+            
+            # Afficher quelques liens pour debug
+            for i, link in enumerate(all_links[:10]):
+                href = link.get('href', '')
+                text = link.get_text(strip=True)
+                st.write(f"- {text[:50]}... → {href[:100]}...")
+            
             return load_fallback_data()
         
-        # Construire l'URL complète si nécessaire
+        # Construire l'URL complète
         if download_link.startswith('/'):
             download_link = "https://www.health-data-hub.fr" + download_link
         elif not download_link.startswith('http'):
-            download_link = "https://www.health-data-hub.fr/" + download_link
+            download_link = "https://www.health-data-hub.fr/" + download_link.lstrip('/')
         
-        st.info(f"📥 Téléchargement du fichier Excel...")
+        st.info(f"📥 Téléchargement depuis: {download_link}")
         
         # Télécharger le fichier Excel
-        excel_response = requests.get(download_link, headers=headers, timeout=60)
+        excel_response = session.get(download_link, headers=headers, timeout=60)
         excel_response.raise_for_status()
+        
+        # Vérifier que c'est bien un fichier Excel
+        content_type = excel_response.headers.get('content-type', '').lower()
+        if 'excel' not in content_type and 'spreadsheet' not in content_type:
+            st.warning(f"⚠️ Type de contenu inattendu: {content_type}")
         
         # Lire le fichier Excel depuis la mémoire
         df = pd.read_excel(BytesIO(excel_response.content), engine="openpyxl")
@@ -165,15 +200,11 @@ def load_data():
         st.success(f"✅ Données chargées avec succès ! ({len(df)} projets trouvés)")
         
         return df
-    except FileNotFoundError:
-        st.error("Fichier 'repertoire_projets.xlsx' non trouvé. Veuillez placer le fichier dans le même dossier que cette application.")
-        return pd.DataFrame()
         
     except requests.exceptions.RequestException as e:
         st.error(f"❌ Erreur de connexion au site HDH : {e}")
         return load_fallback_data()
     except Exception as e:
-        st.error(f"Erreur lors du chargement des données: {e}")
         st.error(f"❌ Erreur lors du chargement des données : {e}")
         return load_fallback_data()
 
@@ -188,15 +219,17 @@ def load_fallback_data():
         if os.path.exists(file_path):
             st.warning("⚠️ Utilisation du fichier local de secours")
             df = pd.read_excel(file_path, engine="openpyxl")
+            st.info(f"📁 Fichier local chargé ({len(df)} projets)")
             return df
         else:
             st.error("❌ Aucun fichier de secours trouvé")
+            st.info("💡 Vous pouvez télécharger manuellement le fichier Excel depuis https://www.health-data-hub.fr/projets et le placer dans le dossier de l'application")
             return pd.DataFrame()
             
     except Exception as e:
         st.error(f"❌ Erreur lors du chargement du fichier de secours : {e}")
         return pd.DataFrame()
-
+        
 df = load_data()
 
 if df.empty:
@@ -980,3 +1013,4 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
