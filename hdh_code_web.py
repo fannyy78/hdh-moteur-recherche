@@ -85,7 +85,6 @@ with col_refresh2:
         st.cache_data.clear()
         st.rerun()
 
-
 # scrapping
 @st.cache_data(ttl=3600)  # Cache pendant 1 heure
 def load_data():
@@ -595,6 +594,7 @@ def get_filtered_df(query_global, selected_types, selected_aires, selected_sourc
         filtered_df = filtered_df[filtered_df["Statut"] == selected_status]
 
     return filtered_df
+
 # ==================== INTERFACE UTILISATEUR ====================
 
 # Section de recherche textuelle
@@ -636,7 +636,7 @@ with col1:
     # **Entité responsable avec recherche textuelle ET dropdown**
     st.markdown('<p class="filter-title">Entité responsable</p>', unsafe_allow_html=True)
 
-        # Recherche textuelle
+    # Recherche textuelle
     entite_responsable = st.text_input(
         "Recherche textuelle",
         value=st.session_state.get("entite_search", ""),
@@ -761,7 +761,7 @@ with col3:
 st.markdown("---")
 
 # ==================== BOUTONS D'ACTION ====================
-col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+col_btn1, col_btn2 = st.columns(2)
 
 with col_btn1:
     if st.button("🔍 Rechercher", type="primary", use_container_width=True):
@@ -774,45 +774,6 @@ with col_btn1:
         st.session_state.show_article = False
 
 with col_btn2:
-    if st.button("🔄 Réinitialiser", use_container_width=True):
-        # Réinitialiser explicitement chaque variable du session_state
-        st.session_state.selected_types = ["TOUT"]
-        st.session_state.selected_aires = ["TOUT"]
-        st.session_state.selected_sources = ["TOUT"]
-        st.session_state.selected_finalites = ["TOUT"]
-        st.session_state.selected_objectifs = ["TOUT"]
-        st.session_state.selected_annees = ["TOUT"]
-        st.session_state.entite_search = ""
-        st.session_state.selected_entite_dropdown = []
-        st.session_state.current_results = None
-        st.session_state.show_article = False
-        st.session_state.selected_article_index = None
-        
-        # Réinitialiser les champs de recherche textuelle
-        st.session_state.search_global = ""
-        st.session_state.entite_filter_text = ""
-        
-        # Message de confirmation
-        st.success("🔄 Tous les filtres ont été réinitialisés !")
-        
-        # Forcer le rechargement
-        st.rerun()
-
-with col_btn3:
-    if st.button("📊 Afficher tout", use_container_width=True):
-        # Réinitialiser tous les filtres et afficher tous les résultats
-        st.session_state.selected_types = ["TOUT"]
-        st.session_state.selected_aires = ["TOUT"]
-        st.session_state.selected_sources = ["TOUT"]
-        st.session_state.selected_finalites = ["TOUT"]
-        st.session_state.selected_objectifs = ["TOUT"]
-        st.session_state.selected_annees = ["TOUT"]
-        st.session_state.entite_search = ""
-        st.session_state.selected_entite_dropdown = []
-        st.session_state.current_results = df
-        st.session_state.show_article = False
-
-with col_btn4:
     if st.session_state.current_results is not None and not st.session_state.current_results.empty:
         # Fonction pour créer le fichier Excel en mémoire
         def create_excel_download():
@@ -835,111 +796,6 @@ with col_btn4:
         st.button("📥 Aucun résultat", disabled=True, use_container_width=True)
 
 st.markdown("---")
-
-# ==================== AFFICHAGE DES CRITÈRES ACTIFS ====================
-# Afficher les critères de filtrage actuellement actifs
-criteria_active = []
-
-if query_global:
-    criteria_active.append(f"**Recherche textuelle:** {query_global}")
-
-if selected_types != ["TOUT"]:
-    criteria_active.append(f"**Type d'entité:** {', '.join(selected_types)}")
-
-if entite_responsable:
-    criteria_active.append(f"**Entité responsable (recherche):** {entite_responsable}")
-
-if selected_entite_dropdown:
-    criteria_active.append(f"**Entités sélectionnées:** {', '.join(selected_entite_dropdown)}")
-
-if selected_aires != ["TOUT"]:
-    criteria_active.append(f"**Aire thérapeutique:** {', '.join(selected_aires)}")
-
-if selected_sources != ["TOUT"]:
-    criteria_active.append(f"**Sources de données:** {', '.join(selected_sources)}")
-
-if selected_finalites != ["TOUT"]:
-    criteria_active.append(f"**Finalités:** {', '.join(selected_finalites)}")
-
-if selected_objectifs != ["TOUT"]:
-    criteria_active.append(f"**Objectifs:** {', '.join(selected_objectifs)}")
-
-if selected_annees != ["TOUT"]:
-    criteria_active.append(f"**Années de début:** {', '.join([str(a) for a in selected_annees])}")
-
-if selected_status != "TOUT":
-    criteria_active.append(f"**Statut:** {selected_status}")
-
-if criteria_active:
-    with st.expander("🎯 Critères de filtrage actifs", expanded=False):
-        for criteria in criteria_active:
-            st.write(f"• {criteria}")
-else:
-    st.info("ℹ️ Aucun filtre actif - Tous les projets seront affichés lors de la recherche")
-
-# ==================== AFFICHAGE DES RÉSULTATS ====================
-if st.session_state.current_results is not None:
-    num_results = len(st.session_state.current_results)
-
-    # Métriques des résultats avec couleurs améliorées
-    col_metric1, col_metric2, col_metric3 = st.columns(3)
-
-    with col_metric1:
-        st.metric("📊 Résultats trouvés", num_results)
-
-    with col_metric2:
-        if num_results > 0:
-            en_cours = len(st.session_state.current_results[st.session_state.current_results["Statut"] == "En cours"])
-            st.metric("🔄 Projets en cours", en_cours)
-
-    with col_metric3:
-        if num_results > 0:
-            termines = len(st.session_state.current_results[st.session_state.current_results["Statut"] == "Terminé"])
-            st.metric("✅ Projets terminés", termines)
-
-    if num_results > 0:
-        st.markdown("### 📋 Tableau des résultats")
-
-        # Afficher le DataFrame avec les colonnes sélectionnées
-        display_df = st.session_state.current_results[columns_display].copy()
-
-        # Configurer l'affichage du dataframe avec hauteur fixe
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            hide_index=True,
-            height=400,  # Hauteur fixe pour éviter les très longs tableaux
-            column_config={
-                "Référence": st.column_config.TextColumn("Référence", width="small"),
-                "title": st.column_config.TextColumn("Titre", width="large"),
-                "Source de données utilisées enrichies": st.column_config.TextColumn("Sources", width="medium"),
-                "statut calendrier": st.column_config.TextColumn("Statut calendrier", width="small"),
-                "Domaines médicaux investigués": st.column_config.TextColumn("Domaines médicaux", width="medium")
-            }
-        )
-
-        # ==================== VISUALISATION D'UN ARTICLE ====================
-        st.markdown("---")
-        st.markdown("### 👁️ Visualiser un article en détail")
-
-        # Sélection de l'article à visualiser
-        references = st.session_state.current_results["Référence"].tolist()
-
-        col_select, col_action = st.columns([3, 1])
-
-        with col_select:
-            selected_reference = st.selectbox(
-                "Sélectionnez un article par sa référence",
-                options=["Sélectionner un article..."] + references,
-                key="article_selector"
-            )
-
-        with col_action:
-            if selected_reference and selected_reference != "Sélectionner un article...":
-                if st.button("👁️ Visualiser", type="primary", use_container_width=True):
-                    st.session_state.show_article = True
-                    st.session_state.selected_article_index = selected_reference
-                    st.rerun()
 
         # Affichage de l'article sélectionné
         if st.session_state.show_article and st.session_state.selected_article_index:
@@ -999,7 +855,7 @@ if st.session_state.current_results is not None:
             st.write("• Essayez de réduire le nombre de filtres appliqués")
             st.write("• Vérifiez l'orthographe de vos termes de recherche")
             st.write("• Utilisez des mots-clés plus généraux")
-            st.write("• Cliquez sur 'Afficher tout' pour voir tous les projets disponibles")
+            st.write("• Cliquez sur 'Rechercher' avec moins de filtres pour voir plus de projets")
 
 else:
     # Message d'accueil quand aucune recherche n'a été effectuée
@@ -1027,9 +883,4 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
-
-
-
-
-
 
