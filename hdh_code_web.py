@@ -4,7 +4,6 @@ import re
 import os
 import sys
 from io import BytesIO
-
 import requests
 from bs4 import BeautifulSoup
 import time
@@ -86,44 +85,37 @@ with col_refresh2:
         st.rerun()
 
 # ==================== CHARGEMENT DES DONNÉES ====================
-@st.cache_data
 @st.cache_data(ttl=3600)  # Cache pendant 1 heure
 def load_data():
-    # Déterminer le chemin de base
-    base_path = os.path.dirname(__file__)
-    
-    # Ajouter gestion des erreurs
     """
     Charge les données depuis le site HDH en scrapant le lien de téléchargement
     """
     try:
-        file_path = os.path.join(base_path, "repertoire_projets.xlsx")
-        df = pd.read_excel(file_path, engine="openpyxl")
         url = "https://www.health-data-hub.fr/projets"
-        
+
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
-        
+
         st.info("🔄 Récupération des données depuis le site HDH...")
-        
+
         # Récupérer la page
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
-        
+
         # Parser le HTML
         soup = BeautifulSoup(response.content, 'html.parser')
-        
+
         # Chercher le lien de téléchargement Excel
         download_link = None
-        
+
         # Méthode 1: Chercher un lien contenant "xlsx" ou "excel"
         for link in soup.find_all('a', href=True):
             href = link['href']
             if any(ext in href.lower() for ext in ['.xlsx', '.xls', 'excel']):
                 download_link = href
                 break
-        
+
         # Méthode 2: Chercher près du texte "Télécharger"
         if not download_link:
             download_elements = soup.find_all(text=re.compile(r'télécharger|download', re.IGNORECASE))
@@ -134,7 +126,7 @@ def load_data():
                     if link and any(ext in link['href'].lower() for ext in ['.xlsx', '.xls']):
                         download_link = link['href']
                         break
-        
+
         # Méthode 3: Chercher dans les boutons ou éléments avec classe download
         if not download_link:
             download_buttons = soup.find_all(['a', 'button'], class_=re.compile(r'download|télécharger', re.IGNORECASE))
@@ -142,38 +134,34 @@ def load_data():
                 if button.get('href') and any(ext in button['href'].lower() for ext in ['.xlsx', '.xls']):
                     download_link = button['href']
                     break
-        
+
         if not download_link:
             st.error("❌ Impossible de trouver le lien de téléchargement Excel sur le site HDH")
             return load_fallback_data()
-        
+
         # Construire l'URL complète si nécessaire
         if download_link.startswith('/'):
             download_link = "https://www.health-data-hub.fr" + download_link
         elif not download_link.startswith('http'):
             download_link = "https://www.health-data-hub.fr/" + download_link
-        
+
         st.info(f"📥 Téléchargement du fichier Excel...")
-        
+
         # Télécharger le fichier Excel
         excel_response = requests.get(download_link, headers=headers, timeout=60)
         excel_response.raise_for_status()
-        
+
         # Lire le fichier Excel depuis la mémoire
         df = pd.read_excel(BytesIO(excel_response.content), engine="openpyxl")
-        
+
         st.success(f"✅ Données chargées avec succès ! ({len(df)} projets trouvés)")
-        
+
         return df
-    except FileNotFoundError:
-        st.error("Fichier 'repertoire_projets.xlsx' non trouvé. Veuillez placer le fichier dans le même dossier que cette application.")
-        return pd.DataFrame()
-        
+
     except requests.exceptions.RequestException as e:
         st.error(f"❌ Erreur de connexion au site HDH : {e}")
         return load_fallback_data()
     except Exception as e:
-        st.error(f"Erreur lors du chargement des données: {e}")
         st.error(f"❌ Erreur lors du chargement des données : {e}")
         return load_fallback_data()
 
@@ -184,7 +172,7 @@ def load_fallback_data():
     try:
         base_path = os.path.dirname(__file__)
         file_path = os.path.join(base_path, "repertoire_projets.xlsx")
-        
+
         if os.path.exists(file_path):
             st.warning("⚠️ Utilisation du fichier local de secours")
             df = pd.read_excel(file_path, engine="openpyxl")
@@ -192,7 +180,7 @@ def load_fallback_data():
         else:
             st.error("❌ Aucun fichier de secours trouvé")
             return pd.DataFrame()
-            
+
     except Exception as e:
         st.error(f"❌ Erreur lors du chargement du fichier de secours : {e}")
         return pd.DataFrame()
@@ -517,11 +505,14 @@ def get_filtered_df(query_global, selected_types, selected_aires, selected_sourc
     # Filtre entité responsable (combinaison recherche textuelle + dropdown)
     if (entite_responsable and entite_responsable.strip() != "") or (selected_entite_dropdown and len(selected_entite_dropdown) > 0):
         mask_entite = False
+    if (st.session_state.entite_search and st.session_state.entite_search.strip() != "") or (selected_entite_dropdown and len(selected_entite_dropdown) > 0):
 
         # Recherche textuelle
         if entite_responsable and entite_responsable.strip() != "":
+        if st.session_state.entite_search and st.session_state.entite_search.strip() != "":
             for col in ["Responsable de traitement 1", "Responsable de traitement 2", "Responsable de traitement 3"]:
                 mask_entite = mask_entite | filtered_df[col].astype(str).str.lower().str.contains(entite_responsable.lower(), na=False)
+                mask_entite = mask_entite | filtered_df[col].astype(str).str.lower().str.contains(st.session_state.entite_search.lower(), na=False)
 
         # Sélection dropdown
         if selected_entite_dropdown and len(selected_entite_dropdown) > 0:
@@ -608,6 +599,14 @@ with col1:
         help="Recherche par mot-clé dans les entités"
     )
     st.session_state.entite_search = entite_responsable
+# Recherche textuelle
+entite_responsable = st.text_input(
+    "Recherche textuelle",
+    placeholder="Tapez pour rechercher...",
+    key="entite_search",  # ✅ Utilise directement la clé session_state
+    label_visibility="collapsed",
+    help="Recherche par mot-clé dans les entités"
+)
 
     # Dropdown de sélection
     selected_entite_dropdown = st.multiselect(
