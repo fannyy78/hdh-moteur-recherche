@@ -4,6 +4,7 @@ import re
 import os
 import sys
 from io import BytesIO
+
 import requests
 from bs4 import BeautifulSoup
 import time
@@ -85,12 +86,19 @@ with col_refresh2:
         st.rerun()
 
 # ==================== CHARGEMENT DES DONNÉES ====================
+@st.cache_data
 @st.cache_data(ttl=3600)  # Cache pendant 1 heure
 def load_data():
+    # Déterminer le chemin de base
+    base_path = os.path.dirname(__file__)
+    
+    # Ajouter gestion des erreurs
     """
     Charge les données depuis le site HDH en scrapant le lien de téléchargement
     """
     try:
+        file_path = os.path.join(base_path, "repertoire_projets.xlsx")
+        df = pd.read_excel(file_path, engine="openpyxl")
         url = "https://www.health-data-hub.fr/projets"
         
         headers = {
@@ -157,11 +165,15 @@ def load_data():
         st.success(f"✅ Données chargées avec succès ! ({len(df)} projets trouvés)")
         
         return df
+    except FileNotFoundError:
+        st.error("Fichier 'repertoire_projets.xlsx' non trouvé. Veuillez placer le fichier dans le même dossier que cette application.")
+        return pd.DataFrame()
         
     except requests.exceptions.RequestException as e:
         st.error(f"❌ Erreur de connexion au site HDH : {e}")
         return load_fallback_data()
     except Exception as e:
+        st.error(f"Erreur lors du chargement des données: {e}")
         st.error(f"❌ Erreur lors du chargement des données : {e}")
         return load_fallback_data()
 
@@ -201,26 +213,26 @@ def normalize_and_enrich_sources(row):
     - Force ESND et Causes médicales de décès dans SNDS
     """
     source_principale = str(row.get("Source de données utilisées", ""))
-    
+
     if pd.isna(source_principale) or source_principale == "nan":
         return ""
-    
+
     sources_enrichies = []
     sources_snds_trouvees = set()
     has_explicit_snds = False
-    
+
     parts = re.split(r",", source_principale)
-    
+
     for part in parts:
         part_clean = clean_value(part)
-        
+
         if not part_clean:
             continue
-        
+
         # Cas 1 : SNDS explicitement mentionné
         if re.search(r'\bSNDS\b', part_clean, re.IGNORECASE):
             has_explicit_snds = True
-            
+
             # Ajouter les composantes du SNDS
             composantes_snds = clean_value(row.get("Composante(s) de la base principale du SNDS mobilisée(s)", ""))
             if composantes_snds:
@@ -229,11 +241,11 @@ def normalize_and_enrich_sources(row):
                     sc_clean = clean_value(sc)
                     if sc_clean:
                         sources_snds_trouvees.add(sc_clean)
-        
+
         # Cas 2 : HDH mentionné
         elif re.search(r'\bHDH\b', part_clean, re.IGNORECASE):
             sources_enrichies.append("HDH")
-            
+
             # Ajouter les bases du HDH
             bases_hdh = clean_value(row.get("Base(s) du catalogue du HDH mobilisée(s)", ""))
             if bases_hdh:
@@ -242,11 +254,11 @@ def normalize_and_enrich_sources(row):
                     sb_clean = clean_value(sb)
                     if sb_clean:
                         sources_enrichies.append(f"HDH - {sb_clean}")
-        
+
         # Cas 3 : Autre/Autres mentionné
         elif re.search(r'\bAutre\(?\s*s\)?\b|\bautres?\b', part_clean, re.IGNORECASE):
             autres_sources = clean_value(row.get("Autre(s) source(s) de donnée(s) mobilisée(s)", ""))
-            
+
             if autres_sources:
                 sous_autres = re.split(r",", autres_sources)
                 for sa in sous_autres:
@@ -260,31 +272,31 @@ def normalize_and_enrich_sources(row):
                             sources_enrichies.append(sa_clean)
             else:
                 sources_enrichies.append("Autres")
-        
+
         # Cas 4 : Composante SNDS directe (ESND, Causes médicales de décès, etc.)
         elif is_snds_component(part_clean):
             sources_snds_trouvees.add(part_clean)
             has_explicit_snds = True
-        
+
         # Cas 5 : Autre source non catégorisée
         else:
             if part_clean:
                 sources_enrichies.append(part_clean)
-    
+
     # Si on a trouvé des composantes SNDS ou SNDS explicite, ajouter SNDS + composantes
     if has_explicit_snds or sources_snds_trouvees:
         # Ajouter SNDS en premier
         final_sources = ["SNDS"]
-        
+
         # Ajouter toutes les composantes trouvées
         for composante in sorted(sources_snds_trouvees):
             final_sources.append(f"SNDS - {composante}")
-        
+
         # Ajouter les autres sources
         final_sources.extend(sources_enrichies)
-        
+
         return ", ".join(final_sources)
-    
+
     # Sinon, retourner les sources normales
     return ", ".join(sources_enrichies) if sources_enrichies else ""
 
@@ -294,14 +306,14 @@ def normalize_autres(text):
     if pd.isna(text):
         return text
     text_str = str(text)
-    
+
     # Normaliser Autres) → Autres
     text_str = re.sub(r'\bAutres\)\b', 'Autres', text_str, flags=re.IGNORECASE)
-    
+
     # Normaliser Autre(s) → Autres
     text_str = re.sub(r'\bAutre\(?\s*s\)?\b', 'Autres', text_str, flags=re.IGNORECASE)
     text_str = re.sub(r'\bautres?\b', 'Autres', text_str, flags=re.IGNORECASE)
-    
+
     return text_str
 
 # Fonction pour déterminer le statut basé sur la colonne "Etape : Complétude"
@@ -322,29 +334,29 @@ def clean_value(text):
     """Nettoie les valeurs indésirables et applique les normalisations de base"""
     if pd.isna(text) or str(text).lower() == "nan":
         return ""
-    
+
     text_str = str(text).strip()
-    
+
     # Enlever les underscores seuls
     if text_str == "_" or text_str == "":
         return ""
-    
+
     # Normaliser "Bases des causes médicales de décès (CépiDC)" → "Causes médicales de décès"
     text_str = re.sub(r'Bases?\s+des?\s+causes?\s+médicales?\s+de\s+décès\s*\(CépiDC\)', 
                       'Causes médicales de décès', text_str, flags=re.IGNORECASE)
-    
+
     # Normaliser "Echantillon du ENSD" → "ESND"
     text_str = re.sub(r'Echantillon\s+du\s+ENSD', 'ESND', text_str, flags=re.IGNORECASE)
-    
+
     #  Normaliser toutes les variantes de Enquête(s), enquêtes, etc. → Enquête
     text_str = re.sub(r'\benqu[êe]te(?:\s*\(?s\)?|\s*s)?\b', 'Enquêtes', text_str, flags=re.IGNORECASE)
-    
+
     #  Normaliser toutes les variantes de Autre(s), autres, etc. → Autres
     text_str = re.sub(r'\bautre(?:\s*\(?s\)?|\s*s)?\b', 'Autres', text_str, flags=re.IGNORECASE)
-    
+
     #  Supprimer parenthèses fermantes orphelines après Enquête ou Autres
     text_str = re.sub(r'\b(Enquête|Autres)\)', r'\1', text_str, flags=re.IGNORECASE)
-    
+
     return text_str
 
 def is_snds_component(source_name):
@@ -357,7 +369,7 @@ def is_snds_component(source_name):
         'certificats de décès',
         'rniam'
     ]
-    
+
     for component in snds_components:
         if component in source_name.lower():
             return True
@@ -503,19 +515,20 @@ def get_filtered_df(query_global, selected_types, selected_aires, selected_sourc
         filtered_df = filtered_df[mask_objectif]
 
     # Filtre entité responsable (combinaison recherche textuelle + dropdown)
-    if (st.session_state.entite_search and st.session_state.entite_search.strip() != "") or (selected_entite_dropdown and len(selected_entite_dropdown) > 0):
-        
+    if (entite_responsable and entite_responsable.strip() != "") or (selected_entite_dropdown and len(selected_entite_dropdown) > 0):
+        mask_entite = False
+
         # Recherche textuelle
-        if st.session_state.entite_search and st.session_state.entite_search.strip() != "":
+        if entite_responsable and entite_responsable.strip() != "":
             for col in ["Responsable de traitement 1", "Responsable de traitement 2", "Responsable de traitement 3"]:
-                mask_entite = mask_entite | filtered_df[col].astype(str).str.lower().str.contains(st.session_state.entite_search.lower(), na=False)
-        
+                mask_entite = mask_entite | filtered_df[col].astype(str).str.lower().str.contains(entite_responsable.lower(), na=False)
+
         # Sélection dropdown
         if selected_entite_dropdown and len(selected_entite_dropdown) > 0:
             for entite in selected_entite_dropdown:
                 for col in ["Responsable de traitement 1", "Responsable de traitement 2", "Responsable de traitement 3"]:
                     mask_entite = mask_entite | (filtered_df[col].astype(str) == entite)
-        
+
         filtered_df = filtered_df[mask_entite]
 
     # Filtre date de début (année)
@@ -528,20 +541,20 @@ def get_filtered_df(query_global, selected_types, selected_aires, selected_sourc
     # Filtre source de données (avec gestion SNDS et HDH hiérarchique)
     if selected_sources and "TOUT" not in selected_sources:
         mask_source = False
-        
+
         # Vérifier si SNDS est sélectionné (sans sous-composante)
         if "SNDS" in selected_sources:
             mask_source = mask_source | filtered_df["Source de données utilisées enrichies"].astype(str).str.contains("SNDS", na=False)
-        
+
         # Vérifier si HDH est sélectionné (sans sous-base)
         if "HDH" in selected_sources:
             mask_source = mask_source | filtered_df["Source de données utilisées enrichies"].astype(str).str.contains("HDH", na=False)
-        
+
         # Pour les autres sources spécifiques
         for s in selected_sources:
             if s != "SNDS" and s != "HDH":
                 mask_source = mask_source | filtered_df["Source de données utilisées enrichies"].astype(str).str.lower().str.contains(re.escape(s.lower()), na=False)
-        
+
         filtered_df = filtered_df[mask_source]
 
     # Filtre statut
@@ -578,32 +591,34 @@ with col1:
     elif len(selected_types) == 0:
         selected_types = ["TOUT"]
     st.session_state.selected_types = selected_types
-    
+
     # Espacement visuel
     st.markdown("<br>", unsafe_allow_html=True)
-    
+
     # **Entité responsable avec recherche textuelle ET dropdown**
     st.markdown('<p class="filter-title">Entité responsable</p>', unsafe_allow_html=True)
-    
-# Recherche textuelle
-entite_responsable = st.text_input(
-    "Recherche textuelle",
-    placeholder="Tapez pour rechercher...",
-    key="entite_search",  # ✅ Utilise directement la clé session_state
-    label_visibility="collapsed",
-    help="Recherche par mot-clé dans les entités"
-)
-    
-# Dropdown de sélection
-selected_entite_dropdown = st.multiselect(
-    "Sélection directe",
-    options=entites_options,
-    default=st.session_state.selected_entite_dropdown,
-    key="entite_filter_dropdown",
-    label_visibility="collapsed",
-    help="Sélectionnez une ou plusieurs entités"
-)
-st.session_state.selected_entite_dropdown = selected_entite_dropdown
+
+    # Recherche textuelle
+    entite_responsable = st.text_input(
+        "Recherche textuelle",
+        value=st.session_state.entite_search,
+        placeholder="Tapez pour rechercher...",
+        key="entite_filter_text",
+        label_visibility="collapsed",
+        help="Recherche par mot-clé dans les entités"
+    )
+    st.session_state.entite_search = entite_responsable
+
+    # Dropdown de sélection
+    selected_entite_dropdown = st.multiselect(
+        "Sélection directe",
+        options=entites_options,
+        default=st.session_state.selected_entite_dropdown,
+        key="entite_filter_dropdown",
+        label_visibility="collapsed",
+        help="Sélectionnez une ou plusieurs entités"
+    )
+    st.session_state.selected_entite_dropdown = selected_entite_dropdown
 
 with col2:
     st.markdown('<p class="filter-title">Aire thérapeutique</p>', unsafe_allow_html=True)
@@ -620,10 +635,10 @@ with col2:
     elif len(selected_aires) == 0:
         selected_aires = ["TOUT"]
     st.session_state.selected_aires = selected_aires
-    
+
     # Espacement visuel
     st.markdown("<br>", unsafe_allow_html=True)
-    
+
     st.markdown('<p class="filter-title">Finalité de l\'étude</p>', unsafe_allow_html=True)
     selected_finalites = st.multiselect(
         "Finalité de l'étude",
@@ -638,10 +653,10 @@ with col2:
     elif len(selected_finalites) == 0:
         selected_finalites = ["TOUT"]
     st.session_state.selected_finalites = selected_finalites
-    
+
     # Espacement visuel
     st.markdown("<br>", unsafe_allow_html=True)
-    
+
     # **Filtre année de début**
     st.markdown('<p class="filter-title">Année de début</p>', unsafe_allow_html=True)
     selected_annees = st.multiselect(
@@ -672,10 +687,10 @@ with col3:
     elif len(selected_objectifs) == 0:
         selected_objectifs = ["TOUT"]
     st.session_state.selected_objectifs = selected_objectifs
-    
+
     # Espacement visuel
     st.markdown("<br>", unsafe_allow_html=True)
-    
+
     st.markdown('<p class="filter-title">Source de données</p>', unsafe_allow_html=True)
     selected_sources = st.multiselect(
         "Source de données",
@@ -690,10 +705,10 @@ with col3:
     elif len(selected_sources) == 0:
         selected_sources = ["TOUT"]
     st.session_state.selected_sources = selected_sources
-    
+
     # Espacement visuel
     st.markdown("<br>", unsafe_allow_html=True)
-    
+
     # **Filtre Statut**
     st.markdown('<p class="filter-title">Statut</p>', unsafe_allow_html=True)
     selected_status = st.selectbox(
@@ -732,7 +747,7 @@ with col_btn2:
         st.session_state.current_results = None
         st.session_state.show_article = False
         st.session_state.selected_article_index = None
-        
+
         # Forcer le rechargement de la page pour appliquer la réinitialisation
         st.rerun()
 
@@ -759,7 +774,7 @@ with col_btn4:
                 st.session_state.current_results.to_excel(writer, index=False, sheet_name='Résultats')
             output.seek(0)
             return output.getvalue()
-        
+
         excel_data = create_excel_download()
         st.download_button(
             label="📥 Exporter Excel",
@@ -818,29 +833,29 @@ else:
 # ==================== AFFICHAGE DES RÉSULTATS ====================
 if st.session_state.current_results is not None:
     num_results = len(st.session_state.current_results)
-    
+
     # Métriques des résultats avec couleurs améliorées
     col_metric1, col_metric2, col_metric3 = st.columns(3)
-    
+
     with col_metric1:
         st.metric("📊 Résultats trouvés", num_results)
-    
+
     with col_metric2:
         if num_results > 0:
             en_cours = len(st.session_state.current_results[st.session_state.current_results["Statut"] == "En cours"])
             st.metric("🔄 Projets en cours", en_cours)
-    
+
     with col_metric3:
         if num_results > 0:
             termines = len(st.session_state.current_results[st.session_state.current_results["Statut"] == "Terminé"])
             st.metric("✅ Projets terminés", termines)
-    
+
     if num_results > 0:
         st.markdown("### 📋 Tableau des résultats")
-        
+
         # Afficher le DataFrame avec les colonnes sélectionnées
         display_df = st.session_state.current_results[columns_display].copy()
-        
+
         # Configurer l'affichage du dataframe avec hauteur fixe
         st.dataframe(
             display_df,
@@ -859,60 +874,60 @@ if st.session_state.current_results is not None:
         # ==================== VISUALISATION D'UN ARTICLE ====================
         st.markdown("---")
         st.markdown("### 👁️ Visualiser un article en détail")
-        
+
         # Sélection de l'article à visualiser
         references = st.session_state.current_results["Référence"].tolist()
-        
+
         col_select, col_action = st.columns([3, 1])
-        
+
         with col_select:
             selected_reference = st.selectbox(
                 "Sélectionnez un article par sa référence",
                 options=["Sélectionner un article..."] + references,
                 key="article_selector"
             )
-        
+
         with col_action:
             if selected_reference and selected_reference != "Sélectionner un article...":
                 if st.button("👁️ Visualiser", type="primary", use_container_width=True):
                     st.session_state.show_article = True
                     st.session_state.selected_article_index = selected_reference
                     st.rerun()
-        
+
         # Affichage de l'article sélectionné
         if st.session_state.show_article and st.session_state.selected_article_index:
             try:
                 article_row = st.session_state.current_results[
                     st.session_state.current_results["Référence"] == st.session_state.selected_article_index
                 ].iloc[0]
-                
+
                 st.markdown("---")
-                
+
                 # En-tête de l'article avec bouton fermer
                 col_title, col_close = st.columns([4, 1])
-                
+
                 with col_title:
                     st.markdown(f"## 📄 Détails de l'article - {st.session_state.selected_article_index}")
-                
+
                 with col_close:
                     if st.button("❌ Fermer", use_container_width=True):
                         st.session_state.show_article = False
                         st.session_state.selected_article_index = None
                         st.rerun()
-                
+
                 # Conteneur avec barre de défilement
                 with st.container():
                     # Afficher toutes les colonnes du DataFrame
                     all_columns = list(df.columns)
-                    
+
                     for col in all_columns:
                         if col in article_row.index:
                             # Titre du champ (en rouge)
                             st.markdown(f'<div class="article-field-label">{col}</div>', unsafe_allow_html=True)
-                            
+
                             # Valeur du champ
                             value = article_row[col]
-                            
+
                             # Vérifier si la valeur est vide ou NaN
                             if pd.isna(value) or str(value).strip() == "" or str(value).lower() == "nan":
                                 st.markdown('<div class="article-field-empty">Donnée non renseignée</div>', unsafe_allow_html=True)
@@ -920,10 +935,10 @@ if st.session_state.current_results is not None:
                                 display_value = str(value)
                                 # Utiliser un fond légèrement coloré pour améliorer la lisibilité
                                 st.markdown(f'<div class="article-field-value">{display_value}</div>', unsafe_allow_html=True)
-                            
+
                             # Ligne de séparation
                             st.markdown("---")
-                
+
             except IndexError:
                 st.error("❌ Article non trouvé dans les résultats.")
             except Exception as e:
@@ -931,7 +946,7 @@ if st.session_state.current_results is not None:
 
     else:
         st.info("ℹ️ Aucun résultat trouvé avec les critères sélectionnés.")
-        
+
         # Suggestions pour améliorer la recherche
         with st.expander("💡 Conseils pour améliorer votre recherche", expanded=False):
             st.write("• Essayez de réduire le nombre de filtres appliqués")
@@ -942,17 +957,17 @@ if st.session_state.current_results is not None:
 else:
     # Message d'accueil quand aucune recherche n'a été effectuée
     st.info("👆 Utilisez les filtres ci-dessus et cliquez sur 'Rechercher' pour afficher les résultats.")
-    
+
     # Statistiques générales de la base de données
     col_stat1, col_stat2, col_stat3 = st.columns(3)
-    
+
     with col_stat1:
         st.metric("📊 Total des projets", len(df))
-    
+
     with col_stat2:
         en_cours_total = len(df[df["Statut"] == "En cours"])
         st.metric("🔄 Projets en cours", en_cours_total)
-    
+
     with col_stat3:
         termines_total = len(df[df["Statut"] == "Terminé"])
         st.metric("✅ Projets terminés", termines_total)
@@ -965,8 +980,3 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
-
-
-
-
-
