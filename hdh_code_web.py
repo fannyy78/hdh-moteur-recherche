@@ -11,7 +11,6 @@ st.set_page_config(
     page_icon="🔍",
     layout="wide"
 )
-
 # ==================== CSS PERSONNALISÉ ====================
 st.markdown("""
 <style>
@@ -97,53 +96,6 @@ df = load_data()
 if df.empty:
     st.warning("Aucune donnée n'a été chargée. L'application ne peut pas fonctionner correctement.")
     st.stop()
-
-# ==================== FONCTIONS DE NETTOYAGE DES DONNÉES ====================
-
-def clean_value(text):
-    """Nettoie les valeurs indésirables et applique les normalisations de base"""
-    if pd.isna(text) or str(text).lower() == "nan":
-        return ""
-    
-    text_str = str(text).strip()
-    
-    # Enlever les underscores seuls
-    if text_str == "_" or text_str == "":
-        return ""
-    
-    # Normaliser "Bases des causes médicales de décès (CépiDC)" → "Causes médicales de décès"
-    text_str = re.sub(r'Bases?\s+des?\s+causes?\s+médicales?\s+de\s+décès\s*\(CépiDC\)', 
-                      'Causes médicales de décès', text_str, flags=re.IGNORECASE)
-    
-    # Normaliser "Echantillon du ENSD" → "ESND"
-    text_str = re.sub(r'Echantillon\s+du\s+ENSD', 'ESND', text_str, flags=re.IGNORECASE)
-    
-    #  Normaliser toutes les variantes de Enquête(s), enquêtes, etc. → Enquête
-    text_str = re.sub(r'\benqu[êe]te(?:\s*\(?s\)?|\s*s)?\b', 'Enquêtes', text_str, flags=re.IGNORECASE)
-    
-    #  Normaliser toutes les variantes de Autre(s), autres, etc. → Autres
-    text_str = re.sub(r'\bautre(?:\s*\(?s\)?|\s*s)?\b', 'Autres', text_str, flags=re.IGNORECASE)
-    
-    #  Supprimer parenthèses fermantes orphelines après Enquête ou Autres
-    text_str = re.sub(r'\b(Enquête|Autres)\)', r'\1', text_str, flags=re.IGNORECASE)
-    
-    return text_str
-
-def is_snds_component(source_name):
-    """Vérifie si une source fait partie du SNDS"""
-    snds_components = [
-        'causes médicales de décès',
-        'esnd',
-        'dcir',
-        'pmsi',
-        'certificats de décès',
-        'rniam'
-    ]
-    
-    for component in snds_components:
-        if component in source_name.lower():
-            return True
-    return False
 
 # Fonction pour normaliser et enrichir les sources de données
 def normalize_and_enrich_sources(row):
@@ -269,6 +221,7 @@ def determine_status(value):
         return "En cours"
     else:
         return "Terminé"
+
 # ==================== APPLICATION DES TRANSFORMATIONS ====================
 df["Source de données utilisées enrichies"] = df.apply(normalize_and_enrich_sources, axis=1)
 df["Domaines médicaux investigués"] = df["Domaines médicaux investigués"].apply(normalize_autres)
@@ -295,6 +248,14 @@ for val in df["Domaines médicaux investigués"].dropna():
         if p_clean:
             aires_set.add(p_clean)
 aires_options = ["TOUT"] + sorted(aires_set)
+
+# **NOUVEAU : Extraction des dates de début**
+# Convertir la colonne "Date de début" en datetime
+df["Date de début"] = pd.to_datetime(df["Date de début"], errors='coerce')
+
+# Extraire les années uniques (en ignorant les valeurs NaT)
+annees_debut = df["Date de début"].dropna().dt.year.unique()
+annees_debut_options = ["TOUT"] + sorted([int(annee) for annee in annees_debut], reverse=True)
 
 # Sources de données
 sources_set = set()
@@ -345,8 +306,12 @@ if 'selected_finalites' not in st.session_state:
     st.session_state.selected_finalites = ["TOUT"]
 if 'selected_objectifs' not in st.session_state:
     st.session_state.selected_objectifs = ["TOUT"]
+if 'selected_annees' not in st.session_state:
+    st.session_state.selected_annees = ["TOUT"]
 if 'entite_search' not in st.session_state:
     st.session_state.entite_search = ""
+if 'selected_entite_dropdown' not in st.session_state:
+    st.session_state.selected_entite_dropdown = []
 if 'current_results' not in st.session_state:
     st.session_state.current_results = None
 if 'show_article' not in st.session_state:
@@ -354,82 +319,6 @@ if 'show_article' not in st.session_state:
 if 'selected_article_index' not in st.session_state:
     st.session_state.selected_article_index = None
 
-# ==================== FONCTION DE FILTRAGE ====================
-def get_filtered_df(query_global, selected_types, selected_aires, selected_sources, 
-                    selected_finalites, selected_objectifs, entite_responsable, selected_status):
-    """
-    Filtre le DataFrame selon tous les critères sélectionnés
-    """
-    filtered_df = df.copy()
-
-    # Filtre recherche globale
-    if query_global:
-        filtered_df = filtered_df[filtered_df["search_text"].str.contains(query_global.lower(), na=False)]
-
-    # Filtre type d'entité
-    if selected_types and "TOUT" not in selected_types:
-        mask_type = False
-        for col in ["Type responsable treatment 1", "Type responsable treatment 2", "Type responsable treatment 3"]:
-            for t in selected_types:
-                mask_type = mask_type | filtered_df[col].astype(str).str.lower().str.contains(t.lower(), na=False)
-        filtered_df = filtered_df[mask_type]
-
-    # Filtre aire thérapeutique
-    if selected_aires and "TOUT" not in selected_aires:
-        mask_aire = False
-        for aire in selected_aires:
-            mask_aire = mask_aire | filtered_df["Domaines médicaux investigués"].astype(str).str.lower().str.contains(aire.lower(), na=False)
-        filtered_df = filtered_df[mask_aire]
-
-    # Filtre finalité
-    if selected_finalites and "TOUT" not in selected_finalites:
-        mask_finalite = False
-        for finalite in selected_finalites:
-            mask_finalite = mask_finalite | filtered_df["Finalité de l'étude"].astype(str).str.lower().str.contains(finalite.lower(), na=False)
-        filtered_df = filtered_df[mask_finalite]
-
-    # Filtre objectifs
-    if selected_objectifs and "TOUT" not in selected_objectifs:
-        mask_objectif = False
-        for objectif in selected_objectifs:
-            mask_objectif = mask_objectif | filtered_df["Objectifs poursuivis"].astype(str).str.lower().str.contains(objectif.lower(), na=False)
-        filtered_df = filtered_df[mask_objectif]
-
-    # Filtre entité responsable (recherche textuelle)
-    if entite_responsable and entite_responsable.strip() != "":
-        mask_entite = False
-        for col in ["Responsable de traitement 1", "Responsable de traitement 2", "Responsable de traitement 3"]:
-            mask_entite = mask_entite | filtered_df[col].astype(str).str.lower().str.contains(entite_responsable.lower(), na=False)
-        filtered_df = filtered_df[mask_entite]
-
-    # Filtre source de données (avec gestion SNDS et HDH hiérarchique)
-    if selected_sources and "TOUT" not in selected_sources:
-        mask_source = False
-        
-        # Vérifier si SNDS est sélectionné (sans sous-composante)
-        if "SNDS" in selected_sources:
-            # Sélectionner TOUTES les lignes avec SNDS (incluant toutes les sous-composantes)
-            mask_source = mask_source | filtered_df["Source de données utilisées enrichies"].astype(str).str.contains("SNDS", na=False)
-        
-        # Vérifier si HDH est sélectionné (sans sous-base)
-        if "HDH" in selected_sources:
-            # Sélectionner TOUTES les lignes avec HDH (incluant toutes les sous-bases)
-            mask_source = mask_source | filtered_df["Source de données utilisées enrichies"].astype(str).str.contains("HDH", na=False)
-        
-        # Pour les autres sources spécifiques
-        for s in selected_sources:
-            if s != "SNDS" and s != "HDH":
-                mask_source = mask_source | filtered_df["Source de données utilisées enrichies"].astype(str).str.lower().str.contains(re.escape(s.lower()), na=False)
-        
-        filtered_df = filtered_df[mask_source]
-
-    # Filtre statut
-    if selected_status != "TOUT":
-        filtered_df = filtered_df[filtered_df["Statut"] == selected_status]
-
-    return filtered_df
-
-# ==================== INTERFACE UTILISATEUR ====================
 # ==================== INTERFACE UTILISATEUR ====================
 
 # Section de recherche textuelle
@@ -460,15 +349,28 @@ with col1:
         selected_types = ["TOUT"]
     st.session_state.selected_types = selected_types
     
-    st.markdown('<p class="filter-title">Entité responsable (recherche textuelle)</p>', unsafe_allow_html=True)
+    # **MODIFIÉ : Entité responsable avec recherche textuelle ET dropdown**
+    st.markdown('<p class="filter-title">Entité responsable</p>', unsafe_allow_html=True)
+    
+    # Recherche textuelle
     entite_responsable = st.text_input(
-        "Entité responsable",
+        "Recherche textuelle",
         value=st.session_state.entite_search,
-        placeholder="Tapez pour rechercher une entité...",
-        key="entite_filter",
-        label_visibility="collapsed"
+        placeholder="Tapez pour rechercher...",
+        key="entite_filter_text",
+        label_visibility="visible"
     )
     st.session_state.entite_search = entite_responsable
+    
+    # Dropdown de sélection
+    selected_entite_dropdown = st.multiselect(
+        "Ou sélectionnez une/des entité(s)",
+        options=entites_options,
+        default=st.session_state.selected_entite_dropdown,
+        key="entite_filter_dropdown",
+        label_visibility="visible"
+    )
+    st.session_state.selected_entite_dropdown = selected_entite_dropdown
     
     st.markdown('<p class="filter-title">Statut</p>', unsafe_allow_html=True)
     selected_status = st.selectbox(
@@ -508,6 +410,21 @@ with col2:
     elif len(selected_finalites) == 0:
         selected_finalites = ["TOUT"]
     st.session_state.selected_finalites = selected_finalites
+    
+    # **NOUVEAU : Filtre année de début**
+    st.markdown('<p class="filter-title">Année de début</p>', unsafe_allow_html=True)
+    selected_annees = st.multiselect(
+        "Année de début",
+        options=annees_debut_options,
+        default=st.session_state.selected_annees,
+        key="annees_filter",
+        label_visibility="collapsed"
+    )
+    if "TOUT" in selected_annees and len(selected_annees) > 1:
+        selected_annees = ["TOUT"]
+    elif len(selected_annees) == 0:
+        selected_annees = ["TOUT"]
+    st.session_state.selected_annees = selected_annees
 
 with col3:
     st.markdown('<p class="filter-title">Objectifs poursuivis</p>', unsafe_allow_html=True)
@@ -549,7 +466,8 @@ with col_btn1:
     if st.button("🔍 Rechercher", type="primary", use_container_width=True):
         filtered_df = get_filtered_df(
             query_global, selected_types, selected_aires, selected_sources,
-            selected_finalites, selected_objectifs, entite_responsable, selected_status
+            selected_finalites, selected_objectifs, entite_responsable, 
+            selected_entite_dropdown, selected_annees, selected_status
         )
         st.session_state.current_results = filtered_df
         st.session_state.show_article = False
@@ -562,7 +480,9 @@ with col_btn2:
         st.session_state.selected_sources = ["TOUT"]
         st.session_state.selected_finalites = ["TOUT"]
         st.session_state.selected_objectifs = ["TOUT"]
+        st.session_state.selected_annees = ["TOUT"]
         st.session_state.entite_search = ""
+        st.session_state.selected_entite_dropdown = []
         st.session_state.current_results = None
         st.session_state.show_article = False
         st.session_state.selected_article_index = None
@@ -578,7 +498,9 @@ with col_btn3:
         st.session_state.selected_sources = ["TOUT"]
         st.session_state.selected_finalites = ["TOUT"]
         st.session_state.selected_objectifs = ["TOUT"]
+        st.session_state.selected_annees = ["TOUT"]
         st.session_state.entite_search = ""
+        st.session_state.selected_entite_dropdown = []
         st.session_state.current_results = df
         st.session_state.show_article = False
 
@@ -617,7 +539,10 @@ if selected_types != ["TOUT"]:
     criteria_active.append(f"**Type d'entité:** {', '.join(selected_types)}")
 
 if entite_responsable:
-    criteria_active.append(f"**Entité responsable:** {entite_responsable}")
+    criteria_active.append(f"**Entité responsable (recherche):** {entite_responsable}")
+
+if selected_entite_dropdown:
+    criteria_active.append(f"**Entités sélectionnées:** {', '.join(selected_entite_dropdown)}")
 
 if selected_aires != ["TOUT"]:
     criteria_active.append(f"**Aire thérapeutique:** {', '.join(selected_aires)}")
@@ -630,6 +555,9 @@ if selected_finalites != ["TOUT"]:
 
 if selected_objectifs != ["TOUT"]:
     criteria_active.append(f"**Objectifs:** {', '.join(selected_objectifs)}")
+
+if selected_annees != ["TOUT"]:
+    criteria_active.append(f"**Années de début:** {', '.join([str(a) for a in selected_annees])}")
 
 if selected_status != "TOUT":
     criteria_active.append(f"**Statut:** {selected_status}")
@@ -754,7 +682,7 @@ if st.session_state.current_results is not None:
                 st.error("❌ Article non trouvé dans les résultats.")
             except Exception as e:
                 st.error(f"❌ Erreur lors de l'affichage de l'article : {e}")
-    
+
     else:
         st.info("ℹ️ Aucun résultat trouvé avec les critères sélectionnés.")
         
@@ -782,6 +710,11 @@ else:
     with col_stat3:
         termines_total = len(df[df["Statut"] == "Terminé"])
         st.metric("✅ Projets terminés", termines_total)
+
+# ==================== FOOTER ====================
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center; color: #666; padding: 2rem 
 
 # ==================== FOOTER ====================
 st.markdown("---")
