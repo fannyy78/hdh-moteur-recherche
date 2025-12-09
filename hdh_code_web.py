@@ -4,16 +4,17 @@ import re
 import os
 import sys
 from io import BytesIO
-
 import requests
 from bs4 import BeautifulSoup
 import time
+
 # ==================== CONFIGURATION DE LA PAGE ====================
 st.set_page_config(
     page_title="Moteur de recherche des projets",
     page_icon="🔍",
     layout="wide"
 )
+
 # ==================== CSS PERSONNALISÉ ====================
 st.markdown("""
 <style>
@@ -73,8 +74,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
-
 # ==================== TITRE DE L'APPLICATION ====================
 st.markdown('<div class="main-header">Moteur de recherche des projets</div>', unsafe_allow_html=True)
 
@@ -85,123 +84,52 @@ with col_refresh2:
         st.cache_data.clear()
         st.rerun()
 
-# ==================== CHARGEMENT DES DONNÉES ====================
-@st.cache_data
-@st.cache_data(ttl=3600)  # Cache pendant 1 heure
-def load_data():
-    # Déterminer le chemin de base
-    base_path = os.path.dirname(__file__)
-    
-    # Ajouter gestion des erreurs
-    """
-    Charge les données depuis le site HDH en scrapant le lien de téléchargement
-    """
-    try:
-        file_path = os.path.join(base_path, "repertoire_projets.xlsx")
-        df = pd.read_excel(file_path, engine="openpyxl")
-        url = "https://www.health-data-hub.fr/projets"
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        
-        st.info("🔄 Récupération des données depuis le site HDH...")
-        
-        # Récupérer la page
-        response = requests.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        
-        # Parser le HTML
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Chercher le lien de téléchargement Excel
-        download_link = None
-        
-        # Méthode 1: Chercher un lien contenant "xlsx" ou "excel"
-        for link in soup.find_all('a', href=True):
-            href = link['href']
-            if any(ext in href.lower() for ext in ['.xlsx', '.xls', 'excel']):
-                download_link = href
-                break
-        
-        # Méthode 2: Chercher près du texte "Télécharger"
-        if not download_link:
-            download_elements = soup.find_all(text=re.compile(r'télécharger|download', re.IGNORECASE))
-            for element in download_elements:
-                parent = element.parent
-                if parent:
-                    link = parent.find('a', href=True)
-                    if link and any(ext in link['href'].lower() for ext in ['.xlsx', '.xls']):
-                        download_link = link['href']
-                        break
-        
-        # Méthode 3: Chercher dans les boutons ou éléments avec classe download
-        if not download_link:
-            download_buttons = soup.find_all(['a', 'button'], class_=re.compile(r'download|télécharger', re.IGNORECASE))
-            for button in download_buttons:
-                if button.get('href') and any(ext in button['href'].lower() for ext in ['.xlsx', '.xls']):
-                    download_link = button['href']
-                    break
-        
-        if not download_link:
-            st.error("❌ Impossible de trouver le lien de téléchargement Excel sur le site HDH")
-            return load_fallback_data()
-        
-        # Construire l'URL complète si nécessaire
-        if download_link.startswith('/'):
-            download_link = "https://www.health-data-hub.fr" + download_link
-        elif not download_link.startswith('http'):
-            download_link = "https://www.health-data-hub.fr/" + download_link
-        
-        st.info(f"📥 Téléchargement du fichier Excel...")
-        
-        # Télécharger le fichier Excel
-        excel_response = requests.get(download_link, headers=headers, timeout=60)
-        excel_response.raise_for_status()
-        
-        # Lire le fichier Excel depuis la mémoire
-        df = pd.read_excel(BytesIO(excel_response.content), engine="openpyxl")
-        
-        st.success(f"✅ Données chargées avec succès ! ({len(df)} projets trouvés)")
-        
-        return df
-    except FileNotFoundError:
-        st.error("Fichier 'repertoire_projets.xlsx' non trouvé. Veuillez placer le fichier dans le même dossier que cette application.")
-        return pd.DataFrame()
-        
-    except requests.exceptions.RequestException as e:
-        st.error(f"❌ Erreur de connexion au site HDH : {e}")
-        return load_fallback_data()
-    except Exception as e:
-        st.error(f"Erreur lors du chargement des données: {e}")
-        st.error(f"❌ Erreur lors du chargement des données : {e}")
-        return load_fallback_data()
+# ==================== FONCTIONS DE NETTOYAGE DES DONNÉES ====================
 
-def load_fallback_data():
-    """
-    Fonction de secours : charge le fichier local si le scraping échoue
-    """
-    try:
-        base_path = os.path.dirname(__file__)
-        file_path = os.path.join(base_path, "repertoire_projets.xlsx")
-        
-        if os.path.exists(file_path):
-            st.warning("⚠️ Utilisation du fichier local de secours")
-            df = pd.read_excel(file_path, engine="openpyxl")
-            return df
-        else:
-            st.error("❌ Aucun fichier de secours trouvé")
-            return pd.DataFrame()
-            
-    except Exception as e:
-        st.error(f"❌ Erreur lors du chargement du fichier de secours : {e}")
-        return pd.DataFrame()
+def clean_value(text):
+    """Nettoie les valeurs indésirables et applique les normalisations de base"""
+    if pd.isna(text) or str(text).lower() == "nan":
+        return ""
 
-df = load_data()
+    text_str = str(text).strip()
 
-if df.empty:
-    st.warning("Aucune donnée n'a été chargée. L'application ne peut pas fonctionner correctement.")
-    st.stop()
+    # Enlever les underscores seuls
+    if text_str == "_" or text_str == "":
+        return ""
+
+    # Normaliser "Bases des causes médicales de décès (CépiDC)" → "Causes médicales de décès"
+    text_str = re.sub(r'Bases?\s+des?\s+causes?\s+médicales?\s+de\s+décès\s*\(CépiDC\)', 
+                      'Causes médicales de décès', text_str, flags=re.IGNORECASE)
+
+    # Normaliser "Echantillon du ENSD" → "ESND"
+    text_str = re.sub(r'Echantillon\s+du\s+ENSD', 'ESND', text_str, flags=re.IGNORECASE)
+
+    #  Normaliser toutes les variantes de Enquête(s), enquêtes, etc. → Enquête
+    text_str = re.sub(r'\benqu[êe]te(?:\s*\(?s\)?|\s*s)?\b', 'Enquêtes', text_str, flags=re.IGNORECASE)
+
+    #  Normaliser toutes les variantes de Autre(s), autres, etc. → Autres
+    text_str = re.sub(r'\bautre(?:\s*\(?s\)?|\s*s)?\b', 'Autres', text_str, flags=re.IGNORECASE)
+
+    #  Supprimer parenthèses fermantes orphelines après Enquête ou Autres
+    text_str = re.sub(r'\b(Enquête|Autres)\)', r'\1', text_str, flags=re.IGNORECASE)
+
+    return text_str
+
+def is_snds_component(source_name):
+    """Vérifie si une source fait partie du SNDS"""
+    snds_components = [
+        'causes médicales de décès',
+        'esnd',
+        'dcir',
+        'pmsi',
+        'certificats de décès',
+        'rniam'
+    ]
+
+    for component in snds_components:
+        if component in source_name.lower():
+            return True
+    return False
 
 # Fonction pour normaliser et enrichir les sources de données
 def normalize_and_enrich_sources(row):
@@ -328,69 +256,6 @@ def determine_status(value):
     else:
         return "Terminé"
 
-# ==================== FONCTIONS DE NETTOYAGE DES DONNÉES ====================
-
-def clean_value(text):
-    """Nettoie les valeurs indésirables et applique les normalisations de base"""
-    if pd.isna(text) or str(text).lower() == "nan":
-        return ""
-
-    text_str = str(text).strip()
-
-    # Enlever les underscores seuls
-    if text_str == "_" or text_str == "":
-        return ""
-
-    # Normaliser "Bases des causes médicales de décès (CépiDC)" → "Causes médicales de décès"
-    text_str = re.sub(r'Bases?\s+des?\s+causes?\s+médicales?\s+de\s+décès\s*\(CépiDC\)', 
-                      'Causes médicales de décès', text_str, flags=re.IGNORECASE)
-
-    # Normaliser "Echantillon du ENSD" → "ESND"
-    text_str = re.sub(r'Echantillon\s+du\s+ENSD', 'ESND', text_str, flags=re.IGNORECASE)
-
-    #  Normaliser toutes les variantes de Enquête(s), enquêtes, etc. → Enquête
-    text_str = re.sub(r'\benqu[êe]te(?:\s*\(?s\)?|\s*s)?\b', 'Enquêtes', text_str, flags=re.IGNORECASE)
-
-    #  Normaliser toutes les variantes de Autre(s), autres, etc. → Autres
-    text_str = re.sub(r'\bautre(?:\s*\(?s\)?|\s*s)?\b', 'Autres', text_str, flags=re.IGNORECASE)
-
-    #  Supprimer parenthèses fermantes orphelines après Enquête ou Autres
-    text_str = re.sub(r'\b(Enquête|Autres)\)', r'\1', text_str, flags=re.IGNORECASE)
-
-    return text_str
-
-def is_snds_component(source_name):
-    """Vérifie si une source fait partie du SNDS"""
-    snds_components = [
-        'causes médicales de décès',
-        'esnd',
-        'dcir',
-        'pmsi',
-        'certificats de décès',
-        'rniam'
-    ]
-
-    for component in snds_components:
-        if component in source_name.lower():
-            return True
-    return False
-
-# ==================== APPLICATION DES TRANSFORMATIONS ====================
-df["Source de données utilisées enrichies"] = df.apply(normalize_and_enrich_sources, axis=1)
-df["Domaines médicaux investigués"] = df["Domaines médicaux investigués"].apply(normalize_autres)
-df["Statut"] = df["Etape  : Complétude"].apply(determine_status)
-df["search_text"] = df.astype(str).apply(lambda x: " ".join(x).lower(), axis=1)
-
-# ==================== COLONNES ET OPTIONS ====================
-columns_display = ["Référence", "title", "Source de données utilisées enrichies",
-                   "statut calendrier", "Domaines médicaux investigués",
-                   "Finalité de l'étude", "Objectifs poursuivis",
-                   "Responsable de traitement 1", "Responsable de traitement 2",
-                   "Responsable de traitement 3", "Description Entité mettant à disposition"]
-
-type_entite_options = ["Université", "Entreprise", "Etablissement public de santé", "Etablissement privé de santé",
-                       "Association", "Bureau d'étude", "Industriel", "Start-up", "INSERM", "Fédération", "Agence"]
-
 # ==================== EXTRACTION DES OPTIONS UNIQUES ====================
 # Aires thérapeutiques
 aires_set = set()
@@ -402,7 +267,7 @@ for val in df["Domaines médicaux investigués"].dropna():
             aires_set.add(p_clean)
 aires_options = ["TOUT"] + sorted(aires_set)
 
-# **NOUVEAU : Extraction des dates de début**
+# Extraction des dates de début
 # Convertir la colonne "Date de début" en datetime
 df["Date de début"] = pd.to_datetime(df["Date de début"], errors='coerce')
 
@@ -562,91 +427,7 @@ def get_filtered_df(query_global, selected_types, selected_aires, selected_sourc
         filtered_df = filtered_df[filtered_df["Statut"] == selected_status]
 
     return filtered_df
-# ==================== INTERFACE UTILISATEUR ====================
 
-# Section de recherche textuelle
-st.markdown('<div class="sub-header">🔍 Recherche textuelle</div>', unsafe_allow_html=True)
-query_global = st.text_input("Recherche globale dans toutes les colonnes", placeholder="Entrez un mot-clé...", key="search_global")
-
-st.markdown("---")
-
-# Section des filtres
-st.markdown('<div class="sub-header">🎯 Filtres avancés</div>', unsafe_allow_html=True)
-
-# Créer 3 colonnes pour les filtres
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.markdown('<p class="filter-title">Type d\'entité</p>', unsafe_allow_html=True)
-    selected_types = st.multiselect(
-        "Type d'entité",
-        options=["TOUT"] + type_entite_options,
-        default=st.session_state.selected_types,
-        key="types_filter",
-        label_visibility="collapsed"
-    )
-    # Logique TOUT : si TOUT est sélectionné, désélectionner les autres
-    if "TOUT" in selected_types and len(selected_types) > 1:
-        selected_types = ["TOUT"]
-    elif len(selected_types) == 0:
-        selected_types = ["TOUT"]
-    st.session_state.selected_types = selected_types
-
-    # Espacement visuel
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # **Entité responsable avec recherche textuelle ET dropdown**
-    st.markdown('<p class="filter-title">Entité responsable</p>', unsafe_allow_html=True)
-
-    # Recherche textuelle
-    entite_responsable = st.text_input(
-        "Recherche textuelle",
-        value=st.session_state.entite_search,
-        placeholder="Tapez pour rechercher...",
-        key="entite_filter_text",
-        label_visibility="collapsed",
-        help="Recherche par mot-clé dans les entités"
-    )
-    st.session_state.entite_search = entite_responsable
-
-    # Dropdown de sélection
-    selected_entite_dropdown = st.multiselect(
-        "Sélection directe",
-        options=entites_options,
-        default=st.session_state.selected_entite_dropdown,
-        key="entite_filter_dropdown",
-        label_visibility="collapsed",
-        help="Sélectionnez une ou plusieurs entités"
-    )
-    st.session_state.selected_entite_dropdown = selected_entite_dropdown
-
-with col2:
-    st.markdown('<p class="filter-title">Aire thérapeutique</p>', unsafe_allow_html=True)
-    selected_aires = st.multiselect(
-        "Aire thérapeutique",
-        options=aires_options,
-        default=st.session_state.selected_aires,
-        key="aires_filter",
-        label_visibility="collapsed"
-    )
-    # Logique TOUT pour aires thérapeutiques
-    if "TOUT" in selected_aires and len(selected_aires) > 1:
-        selected_aires = ["TOUT"]
-    elif len(selected_aires) == 0:
-        selected_aires = ["TOUT"]
-    st.session_state.selected_aires = selected_aires
-
-    # Espacement visuel
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    st.markdown('<p class="filter-title">Finalité de l\'étude</p>', unsafe_allow_html=True)
-    selected_finalites = st.multiselect(
-        "Finalité de l'étude",
-        options=finalites_options,
-        default=st.session_state.selected_finalites,
-        key="finalites_filter",
-        label_visibility="collapsed"
-    )
     # Logique TOUT pour finalités
     if "TOUT" in selected_finalites and len(selected_finalites) > 1:
         selected_finalites = ["TOUT"]
@@ -980,3 +761,4 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
