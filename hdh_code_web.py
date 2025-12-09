@@ -488,7 +488,10 @@ with col1:
         selected_types = ["TOUT"]
     st.session_state.selected_types = selected_types
     
-    # **MODIFIÉ : Entité responsable avec recherche textuelle ET dropdown**
+    # Espacement visuel
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # **Entité responsable avec recherche textuelle ET dropdown**
     st.markdown('<p class="filter-title">Entité responsable</p>', unsafe_allow_html=True)
     
     # Recherche textuelle
@@ -497,17 +500,19 @@ with col1:
         value=st.session_state.entite_search,
         placeholder="Tapez pour rechercher...",
         key="entite_filter_text",
-        label_visibility="visible"
+        label_visibility="collapsed",
+        help="Recherche par mot-clé dans les entités"
     )
     st.session_state.entite_search = entite_responsable
     
     # Dropdown de sélection
     selected_entite_dropdown = st.multiselect(
-        "Ou sélectionnez une/des entité(s)",
+        "Sélection directe",
         options=entites_options,
         default=st.session_state.selected_entite_dropdown,
         key="entite_filter_dropdown",
-        label_visibility="visible"
+        label_visibility="collapsed",
+        help="Sélectionnez une ou plusieurs entités"
     )
     st.session_state.selected_entite_dropdown = selected_entite_dropdown
 
@@ -527,6 +532,9 @@ with col2:
         selected_aires = ["TOUT"]
     st.session_state.selected_aires = selected_aires
     
+    # Espacement visuel
+    st.markdown("<br>", unsafe_allow_html=True)
+    
     st.markdown('<p class="filter-title">Finalité de l\'étude</p>', unsafe_allow_html=True)
     selected_finalites = st.multiselect(
         "Finalité de l'étude",
@@ -542,7 +550,10 @@ with col2:
         selected_finalites = ["TOUT"]
     st.session_state.selected_finalites = selected_finalites
     
-    # **NOUVEAU : Filtre année de début**
+    # Espacement visuel
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # **Filtre année de début**
     st.markdown('<p class="filter-title">Année de début</p>', unsafe_allow_html=True)
     selected_annees = st.multiselect(
         "Année de début",
@@ -573,6 +584,9 @@ with col3:
         selected_objectifs = ["TOUT"]
     st.session_state.selected_objectifs = selected_objectifs
     
+    # Espacement visuel
+    st.markdown("<br>", unsafe_allow_html=True)
+    
     st.markdown('<p class="filter-title">Source de données</p>', unsafe_allow_html=True)
     selected_sources = st.multiselect(
         "Source de données",
@@ -588,7 +602,10 @@ with col3:
         selected_sources = ["TOUT"]
     st.session_state.selected_sources = selected_sources
     
-    # **DÉPLACÉ : Filtre Statut maintenant en colonne 3, sous Source de données**
+    # Espacement visuel
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # **Filtre Statut**
     st.markdown('<p class="filter-title">Statut</p>', unsafe_allow_html=True)
     selected_status = st.selectbox(
         "Statut",
@@ -859,4 +876,5 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
 
