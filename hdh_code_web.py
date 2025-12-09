@@ -503,13 +503,12 @@ def get_filtered_df(query_global, selected_types, selected_aires, selected_sourc
         filtered_df = filtered_df[mask_objectif]
 
     # Filtre entité responsable (combinaison recherche textuelle + dropdown)
-    if (entite_responsable and entite_responsable.strip() != "") or (selected_entite_dropdown and len(selected_entite_dropdown) > 0):
-        mask_entite = False
+    if (st.session_state.entite_search and st.session_state.entite_search.strip() != "") or (selected_entite_dropdown and len(selected_entite_dropdown) > 0):
         
         # Recherche textuelle
-        if entite_responsable and entite_responsable.strip() != "":
+        if st.session_state.entite_search and st.session_state.entite_search.strip() != "":
             for col in ["Responsable de traitement 1", "Responsable de traitement 2", "Responsable de traitement 3"]:
-                mask_entite = mask_entite | filtered_df[col].astype(str).str.lower().str.contains(entite_responsable.lower(), na=False)
+                mask_entite = mask_entite | filtered_df[col].astype(str).str.lower().str.contains(st.session_state.entite_search.lower(), na=False)
         
         # Sélection dropdown
         if selected_entite_dropdown and len(selected_entite_dropdown) > 0:
@@ -586,16 +585,14 @@ with col1:
     # **Entité responsable avec recherche textuelle ET dropdown**
     st.markdown('<p class="filter-title">Entité responsable</p>', unsafe_allow_html=True)
     
-    # Recherche textuelle
-    entite_responsable = st.text_input(
-        "Recherche textuelle",
-        value=st.session_state.entite_search,
-        placeholder="Tapez pour rechercher...",
-        key="entite_filter_text",
-        label_visibility="collapsed",
-        help="Recherche par mot-clé dans les entités"
-    )
-    st.session_state.entite_search = entite_responsable
+# Recherche textuelle
+entite_responsable = st.text_input(
+    "Recherche textuelle",
+    placeholder="Tapez pour rechercher...",
+    key="entite_search",  # ✅ Utilise directement la clé session_state
+    label_visibility="collapsed",
+    help="Recherche par mot-clé dans les entités"
+)
     
     # Dropdown de sélection
     selected_entite_dropdown = st.multiselect(
@@ -968,6 +965,7 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
 
 
 
