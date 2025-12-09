@@ -775,39 +775,13 @@ with col_btn1:
 
 with col_btn2:
     if st.button("🔄 Réinitialiser", use_container_width=True):
-        # Supprimer TOUTES les clés du session_state liées aux filtres
-        keys_to_delete = []
-        for key in st.session_state.keys():
-            if any(filter_key in key for filter_key in [
-                'filter', 'search', 'entite', 'selected', 'current_results', 
-                'show_article', 'article', 'types', 'aires', 'sources', 
-                'finalites', 'objectifs', 'annees', 'status'
-            ]):
-                keys_to_delete.append(key)
-        
-        # Supprimer toutes les clés trouvées
-        for key in keys_to_delete:
-            if key in st.session_state:
-                del st.session_state[key]
-        
-        # Réinitialiser explicitement les valeurs par défaut
-        st.session_state.selected_types = ["TOUT"]
-        st.session_state.selected_aires = ["TOUT"]
-        st.session_state.selected_sources = ["TOUT"]
-        st.session_state.selected_finalites = ["TOUT"]
-        st.session_state.selected_objectifs = ["TOUT"]
-        st.session_state.selected_annees = ["TOUT"]
-        st.session_state.entite_search = ""
-        st.session_state.selected_entite_dropdown = []
-        st.session_state.current_results = None
-        st.session_state.show_article = False
-        st.session_state.selected_article_index = None
+        # Vider complètement le session_state
+        st.session_state.clear()
         
         # Message de confirmation
-        st.success("🔄 Filtres réinitialisés !")
-        time.sleep(0.5)  # Petite pause pour voir le message
+        st.success("🔄 Application réinitialisée !")
         
-        # Forcer le rechargement complet
+        # Forcer le rechargement
         st.rerun()
 
 with col_btn3:
@@ -1039,6 +1013,7 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
 
 
 
