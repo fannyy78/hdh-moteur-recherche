@@ -636,16 +636,17 @@ with col1:
     # **Entité responsable avec recherche textuelle ET dropdown**
     st.markdown('<p class="filter-title">Entité responsable</p>', unsafe_allow_html=True)
 
-    # Recherche textuelle
+        # Recherche textuelle
     entite_responsable = st.text_input(
         "Recherche textuelle",
-        value=st.session_state.entite_search,
+        value=st.session_state.get("entite_search", ""),
         placeholder="Tapez pour rechercher...",
         key="entite_filter_text",
         label_visibility="collapsed",
         help="Recherche par mot-clé dans les entités"
     )
-    st.session_state.entite_search = entite_responsable
+    if entite_responsable != st.session_state.get("entite_search", ""):
+        st.session_state.entite_search = entite_responsable
 
     # Dropdown de sélection
     selected_entite_dropdown = st.multiselect(
@@ -774,24 +775,22 @@ with col_btn1:
 
 with col_btn2:
     if st.button("🔄 Réinitialiser", use_container_width=True):
-        # Liste de toutes les clés à supprimer
-        keys_to_reset = [
-            'selected_types', 'selected_aires', 'selected_sources', 
-            'selected_finalites', 'selected_objectifs', 'selected_annees',
-            'entite_search', 'selected_entite_dropdown', 'current_results',
-            'show_article', 'selected_article_index',
-            'types_filter', 'aires_filter', 'sources_filter',
-            'finalites_filter', 'objectifs_filter', 'annees_filter',
-            'entite_filter_text', 'entite_filter_dropdown', 'status_filter',
-            'search_global', 'article_selector'
-        ]
+        # Supprimer TOUTES les clés du session_state liées aux filtres
+        keys_to_delete = []
+        for key in st.session_state.keys():
+            if any(filter_key in key for filter_key in [
+                'filter', 'search', 'entite', 'selected', 'current_results', 
+                'show_article', 'article', 'types', 'aires', 'sources', 
+                'finalites', 'objectifs', 'annees', 'status'
+            ]):
+                keys_to_delete.append(key)
         
-        # Supprimer toutes les clés
-        for key in keys_to_reset:
+        # Supprimer toutes les clés trouvées
+        for key in keys_to_delete:
             if key in st.session_state:
                 del st.session_state[key]
         
-        # Réinitialiser les valeurs par défaut
+        # Réinitialiser explicitement les valeurs par défaut
         st.session_state.selected_types = ["TOUT"]
         st.session_state.selected_aires = ["TOUT"]
         st.session_state.selected_sources = ["TOUT"]
@@ -804,7 +803,11 @@ with col_btn2:
         st.session_state.show_article = False
         st.session_state.selected_article_index = None
         
-        # Forcer le rechargement
+        # Message de confirmation
+        st.success("🔄 Filtres réinitialisés !")
+        time.sleep(0.5)  # Petite pause pour voir le message
+        
+        # Forcer le rechargement complet
         st.rerun()
 
 with col_btn3:
@@ -1036,6 +1039,7 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
 
 
 
