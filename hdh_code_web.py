@@ -70,6 +70,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
+
 # ==================== TITRE DE L'APPLICATION ====================
 st.markdown('<div class="main-header">Moteur de recherche des projets</div>', unsafe_allow_html=True)
 
@@ -222,6 +224,53 @@ def determine_status(value):
     else:
         return "Terminé"
 
+# ==================== FONCTIONS DE NETTOYAGE DES DONNÉES ====================
+
+def clean_value(text):
+    """Nettoie les valeurs indésirables et applique les normalisations de base"""
+    if pd.isna(text) or str(text).lower() == "nan":
+        return ""
+    
+    text_str = str(text).strip()
+    
+    # Enlever les underscores seuls
+    if text_str == "_" or text_str == "":
+        return ""
+    
+    # Normaliser "Bases des causes médicales de décès (CépiDC)" → "Causes médicales de décès"
+    text_str = re.sub(r'Bases?\s+des?\s+causes?\s+médicales?\s+de\s+décès\s*\(CépiDC\)', 
+                      'Causes médicales de décès', text_str, flags=re.IGNORECASE)
+    
+    # Normaliser "Echantillon du ENSD" → "ESND"
+    text_str = re.sub(r'Echantillon\s+du\s+ENSD', 'ESND', text_str, flags=re.IGNORECASE)
+    
+    #  Normaliser toutes les variantes de Enquête(s), enquêtes, etc. → Enquête
+    text_str = re.sub(r'\benqu[êe]te(?:\s*\(?s\)?|\s*s)?\b', 'Enquêtes', text_str, flags=re.IGNORECASE)
+    
+    #  Normaliser toutes les variantes de Autre(s), autres, etc. → Autres
+    text_str = re.sub(r'\bautre(?:\s*\(?s\)?|\s*s)?\b', 'Autres', text_str, flags=re.IGNORECASE)
+    
+    #  Supprimer parenthèses fermantes orphelines après Enquête ou Autres
+    text_str = re.sub(r'\b(Enquête|Autres)\)', r'\1', text_str, flags=re.IGNORECASE)
+    
+    return text_str
+
+def is_snds_component(source_name):
+    """Vérifie si une source fait partie du SNDS"""
+    snds_components = [
+        'causes médicales de décès',
+        'esnd',
+        'dcir',
+        'pmsi',
+        'certificats de décès',
+        'rniam'
+    ]
+    
+    for component in snds_components:
+        if component in source_name.lower():
+            return True
+    return False
+
 # ==================== APPLICATION DES TRANSFORMATIONS ====================
 df["Source de données utilisées enrichies"] = df.apply(normalize_and_enrich_sources, axis=1)
 df["Domaines médicaux investigués"] = df["Domaines médicaux investigués"].apply(normalize_autres)
@@ -319,6 +368,96 @@ if 'show_article' not in st.session_state:
 if 'selected_article_index' not in st.session_state:
     st.session_state.selected_article_index = None
 
+# ==================== FONCTION DE FILTRAGE ====================
+def get_filtered_df(query_global, selected_types, selected_aires, selected_sources, 
+                    selected_finalites, selected_objectifs, entite_responsable, 
+                    selected_entite_dropdown, selected_annees, selected_status):
+    """
+    Filtre le DataFrame selon tous les critères sélectionnés
+    """
+    filtered_df = df.copy()
+
+    # Filtre recherche globale
+    if query_global:
+        filtered_df = filtered_df[filtered_df["search_text"].str.contains(query_global.lower(), na=False)]
+
+    # Filtre type d'entité
+    if selected_types and "TOUT" not in selected_types:
+        mask_type = False
+        for col in ["Type responsable treatment 1", "Type responsable treatment 2", "Type responsable treatment 3"]:
+            for t in selected_types:
+                mask_type = mask_type | filtered_df[col].astype(str).str.lower().str.contains(t.lower(), na=False)
+        filtered_df = filtered_df[mask_type]
+
+    # Filtre aire thérapeutique
+    if selected_aires and "TOUT" not in selected_aires:
+        mask_aire = False
+        for aire in selected_aires:
+            mask_aire = mask_aire | filtered_df["Domaines médicaux investigués"].astype(str).str.lower().str.contains(aire.lower(), na=False)
+        filtered_df = filtered_df[mask_aire]
+
+    # Filtre finalité
+    if selected_finalites and "TOUT" not in selected_finalites:
+        mask_finalite = False
+        for finalite in selected_finalites:
+            mask_finalite = mask_finalite | filtered_df["Finalité de l'étude"].astype(str).str.lower().str.contains(finalite.lower(), na=False)
+        filtered_df = filtered_df[mask_finalite]
+
+    # Filtre objectifs
+    if selected_objectifs and "TOUT" not in selected_objectifs:
+        mask_objectif = False
+        for objectif in selected_objectifs:
+            mask_objectif = mask_objectif | filtered_df["Objectifs poursuivis"].astype(str).str.lower().str.contains(objectif.lower(), na=False)
+        filtered_df = filtered_df[mask_objectif]
+
+    # Filtre entité responsable (combinaison recherche textuelle + dropdown)
+    if (entite_responsable and entite_responsable.strip() != "") or (selected_entite_dropdown and len(selected_entite_dropdown) > 0):
+        mask_entite = False
+        
+        # Recherche textuelle
+        if entite_responsable and entite_responsable.strip() != "":
+            for col in ["Responsable de traitement 1", "Responsable de traitement 2", "Responsable de traitement 3"]:
+                mask_entite = mask_entite | filtered_df[col].astype(str).str.lower().str.contains(entite_responsable.lower(), na=False)
+        
+        # Sélection dropdown
+        if selected_entite_dropdown and len(selected_entite_dropdown) > 0:
+            for entite in selected_entite_dropdown:
+                for col in ["Responsable de traitement 1", "Responsable de traitement 2", "Responsable de traitement 3"]:
+                    mask_entite = mask_entite | (filtered_df[col].astype(str) == entite)
+        
+        filtered_df = filtered_df[mask_entite]
+
+    # Filtre date de début (année)
+    if selected_annees and "TOUT" not in selected_annees:
+        mask_annee = False
+        for annee in selected_annees:
+            mask_annee = mask_annee | (filtered_df["Date de début"].dt.year == annee)
+        filtered_df = filtered_df[mask_annee]
+
+    # Filtre source de données (avec gestion SNDS et HDH hiérarchique)
+    if selected_sources and "TOUT" not in selected_sources:
+        mask_source = False
+        
+        # Vérifier si SNDS est sélectionné (sans sous-composante)
+        if "SNDS" in selected_sources:
+            mask_source = mask_source | filtered_df["Source de données utilisées enrichies"].astype(str).str.contains("SNDS", na=False)
+        
+        # Vérifier si HDH est sélectionné (sans sous-base)
+        if "HDH" in selected_sources:
+            mask_source = mask_source | filtered_df["Source de données utilisées enrichies"].astype(str).str.contains("HDH", na=False)
+        
+        # Pour les autres sources spécifiques
+        for s in selected_sources:
+            if s != "SNDS" and s != "HDH":
+                mask_source = mask_source | filtered_df["Source de données utilisées enrichies"].astype(str).str.lower().str.contains(re.escape(s.lower()), na=False)
+        
+        filtered_df = filtered_df[mask_source]
+
+    # Filtre statut
+    if selected_status != "TOUT":
+        filtered_df = filtered_df[filtered_df["Statut"] == selected_status]
+
+    return filtered_df
 # ==================== INTERFACE UTILISATEUR ====================
 
 # Section de recherche textuelle
@@ -710,11 +849,6 @@ else:
     with col_stat3:
         termines_total = len(df[df["Statut"] == "Terminé"])
         st.metric("✅ Projets terminés", termines_total)
-
-# ==================== FOOTER ====================
-st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: #666; padding: 2rem 
 
 # ==================== FOOTER ====================
 st.markdown("---")
