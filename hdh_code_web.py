@@ -504,6 +504,103 @@ if 'show_article' not in st.session_state:
 if 'selected_article_index' not in st.session_state:
     st.session_state.selected_article_index = None
 
+# ==================== APPLICATION DES TRANSFORMATIONS ====================
+df["Source de données utilisées enrichies"] = df.apply(normalize_and_enrich_sources, axis=1)
+df["Domaines médicaux investigués"] = df["Domaines médicaux investigués"].apply(normalize_autres)
+df["Statut"] = df["Etape  : Complétude"].apply(determine_status)
+df["search_text"] = df.astype(str).apply(lambda x: " ".join(x).lower(), axis=1)
+
+# ==================== COLONNES ET OPTIONS ====================
+columns_display = ["Référence", "title", "Source de données utilisées enrichies",
+                   "statut calendrier", "Domaines médicaux investigués",
+                   "Finalité de l'étude", "Objectifs poursuivis",
+                   "Responsable de traitement 1", "Responsable de traitement 2",
+                   "Responsable de traitement 3", "Description Entité mettant à disposition"]
+
+type_entite_options = ["Université", "Entreprise", "Etablissement public de santé", "Etablissement privé de santé",
+                       "Association", "Bureau d'étude", "Industriel", "Start-up", "INSERM", "Fédération", "Agence"]
+
+# ==================== EXTRACTION DES OPTIONS UNIQUES ====================
+# Aires thérapeutiques
+aires_set = set()
+for val in df["Domaines médicaux investigués"].dropna():
+    parts = re.split(r",", str(val))
+    for p in parts:
+        p_clean = clean_value(p)
+        if p_clean:
+            aires_set.add(p_clean)
+aires_options = ["TOUT"] + sorted(aires_set)
+
+# **NOUVEAU : Extraction des dates de début**
+# Convertir la colonne "Date de début" en datetime
+df["Date de début"] = pd.to_datetime(df["Date de début"], errors='coerce')
+
+# Extraire les années uniques (en ignorant les valeurs NaT)
+annees_debut = df["Date de début"].dropna().dt.year.unique()
+annees_debut_options = ["TOUT"] + sorted([int(annee) for annee in annees_debut], reverse=True)
+
+# Sources de données
+sources_set = set()
+for val in df["Source de données utilisées enrichies"].dropna():
+    parts = re.split(r",", str(val))
+    for p in parts:
+        p_clean = clean_value(p)
+        if p_clean:
+            sources_set.add(p_clean)
+source_donnees_options = ["TOUT"] + sorted(sources_set)
+
+# Finalités
+finalites_set = set()
+for val in df["Finalité de l'étude"].dropna():
+    parts = re.split(r",", str(val))
+    for p in parts:
+        p_clean = clean_value(p)
+        if p_clean:
+            finalites_set.add(p_clean)
+finalites_options = ["TOUT"] + sorted(finalites_set)
+
+# Objectifs
+objectifs_set = set()
+for val in df["Objectifs poursuivis"].dropna():
+    parts = re.split(r",", str(val))
+    for p in parts:
+        p_clean = clean_value(p)
+        if p_clean:
+            objectifs_set.add(p_clean)
+objectifs_options = ["TOUT"] + sorted(objectifs_set)
+
+# Entités responsables
+entites_responsables = pd.concat([
+    df["Responsable de traitement 1"], 
+    df["Responsable de traitement 2"], 
+    df["Responsable de traitement 3"]
+]).dropna().unique()
+entites_options = sorted(entites_responsables)
+
+# ==================== INITIALISATION DES ÉTATS ====================
+if 'selected_types' not in st.session_state:
+    st.session_state.selected_types = ["TOUT"]
+if 'selected_aires' not in st.session_state:
+    st.session_state.selected_aires = ["TOUT"]
+if 'selected_sources' not in st.session_state:
+    st.session_state.selected_sources = ["TOUT"]
+if 'selected_finalites' not in st.session_state:
+    st.session_state.selected_finalites = ["TOUT"]
+if 'selected_objectifs' not in st.session_state:
+    st.session_state.selected_objectifs = ["TOUT"]
+if 'selected_annees' not in st.session_state:
+    st.session_state.selected_annees = ["TOUT"]
+if 'entite_search' not in st.session_state:
+    st.session_state.entite_search = ""
+if 'selected_entite_dropdown' not in st.session_state:
+    st.session_state.selected_entite_dropdown = []
+if 'current_results' not in st.session_state:
+    st.session_state.current_results = None
+if 'show_article' not in st.session_state:
+    st.session_state.show_article = False
+if 'selected_article_index' not in st.session_state:
+    st.session_state.selected_article_index = None
+
 # ==================== FONCTION DE FILTRAGE ====================
 def get_filtered_df(query_global, selected_types, selected_aires, selected_sources, 
                     selected_finalites, selected_objectifs, entite_responsable, 
@@ -797,65 +894,170 @@ with col_btn2:
 
 st.markdown("---")
 
-    # Affichage de l'article sélectionné
-    if st.session_state.show_article and st.session_state.selected_article_index:
-        try:
-            article_row = st.session_state.current_results[
-                st.session_state.current_results["Référence"] == st.session_state.selected_article_index
-            ].iloc[0]
+# ==================== AFFICHAGE DES CRITÈRES ACTIFS ====================
+# Afficher les critères de filtrage actuellement actifs
+criteria_active = []
 
-            st.markdown("---")
+if query_global:
+    criteria_active.append(f"**Recherche textuelle:** {query_global}")
 
-            # En-tête de l'article avec bouton fermer
-            col_title, col_close = st.columns([4, 1])
+if selected_types != ["TOUT"]:
+    criteria_active.append(f"**Type d'entité:** {', '.join(selected_types)}")
 
-            with col_title:
-                st.markdown(f"## 📄 Détails de l'article - {st.session_state.selected_article_index}")
+if entite_responsable:
+    criteria_active.append(f"**Entité responsable (recherche):** {entite_responsable}")
 
-            with col_close:
-                if st.button("❌ Fermer", use_container_width=True):
-                    st.session_state.show_article = False
-                    st.session_state.selected_article_index = None
+if selected_entite_dropdown:
+    criteria_active.append(f"**Entités sélectionnées:** {', '.join(selected_entite_dropdown)}")
+
+if selected_aires != ["TOUT"]:
+    criteria_active.append(f"**Aire thérapeutique:** {', '.join(selected_aires)}")
+
+if selected_sources != ["TOUT"]:
+    criteria_active.append(f"**Sources de données:** {', '.join(selected_sources)}")
+
+if selected_finalites != ["TOUT"]:
+    criteria_active.append(f"**Finalités:** {', '.join(selected_finalites)}")
+
+if selected_objectifs != ["TOUT"]:
+    criteria_active.append(f"**Objectifs:** {', '.join(selected_objectifs)}")
+
+if selected_annees != ["TOUT"]:
+    criteria_active.append(f"**Années de début:** {', '.join([str(a) for a in selected_annees])}")
+
+if selected_status != "TOUT":
+    criteria_active.append(f"**Statut:** {selected_status}")
+
+if criteria_active:
+    with st.expander("🎯 Critères de filtrage actifs", expanded=False):
+        for criteria in criteria_active:
+            st.write(f"• {criteria}")
+else:
+    st.info("ℹ️ Aucun filtre actif - Tous les projets seront affichés lors de la recherche")
+
+# ==================== AFFICHAGE DES RÉSULTATS ====================
+if st.session_state.current_results is not None:
+    num_results = len(st.session_state.current_results)
+
+    # Métriques des résultats avec couleurs améliorées
+    col_metric1, col_metric2, col_metric3 = st.columns(3)
+
+    with col_metric1:
+        st.metric("📊 Résultats trouvés", num_results)
+
+    with col_metric2:
+        if num_results > 0:
+            en_cours = len(st.session_state.current_results[st.session_state.current_results["Statut"] == "En cours"])
+            st.metric("🔄 Projets en cours", en_cours)
+
+    with col_metric3:
+        if num_results > 0:
+            termines = len(st.session_state.current_results[st.session_state.current_results["Statut"] == "Terminé"])
+            st.metric("✅ Projets terminés", termines)
+
+    if num_results > 0:
+        st.markdown("### 📋 Tableau des résultats")
+
+        # Afficher le DataFrame avec les colonnes sélectionnées
+        display_df = st.session_state.current_results[columns_display].copy()
+
+        # Configurer l'affichage du dataframe avec hauteur fixe
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            hide_index=True,
+            height=400,  # Hauteur fixe pour éviter les très longs tableaux
+            column_config={
+                "Référence": st.column_config.TextColumn("Référence", width="small"),
+                "title": st.column_config.TextColumn("Titre", width="large"),
+                "Source de données utilisées enrichies": st.column_config.TextColumn("Sources", width="medium"),
+                "statut calendrier": st.column_config.TextColumn("Statut calendrier", width="small"),
+                "Domaines médicaux investigués": st.column_config.TextColumn("Domaines médicaux", width="medium")
+            }
+        )
+
+        # ==================== VISUALISATION D'UN ARTICLE ====================
+        st.markdown("---")
+        st.markdown("### 👁️ Visualiser un article en détail")
+
+        # Sélection de l'article à visualiser
+        references = st.session_state.current_results["Référence"].tolist()
+
+        col_select, col_action = st.columns([3, 1])
+
+        with col_select:
+            selected_reference = st.selectbox(
+                "Sélectionnez un article par sa référence",
+                options=["Sélectionner un article..."] + references,
+                key="article_selector"
+            )
+
+        with col_action:
+            if selected_reference and selected_reference != "Sélectionner un article...":
+                if st.button("👁️ Visualiser", type="primary", use_container_width=True):
+                    st.session_state.show_article = True
+                    st.session_state.selected_article_index = selected_reference
                     st.rerun()
 
-            # Conteneur avec barre de défilement
-            with st.container():
-                # Afficher toutes les colonnes du DataFrame
-                all_columns = list(df.columns)
+        # Affichage de l'article sélectionné
+        if st.session_state.show_article and st.session_state.selected_article_index:
+            try:
+                article_row = st.session_state.current_results[
+                    st.session_state.current_results["Référence"] == st.session_state.selected_article_index
+                ].iloc[0]
 
-                for col in all_columns:
-                    if col in article_row.index:
-                        # Titre du champ (en rouge)
-                        st.markdown(f'<div class="article-field-label">{col}</div>', unsafe_allow_html=True)
+                st.markdown("---")
 
-                        # Valeur du champ
-                        value = article_row[col]
+                # En-tête de l'article avec bouton fermer
+                col_title, col_close = st.columns([4, 1])
 
-                        # Vérifier si la valeur est vide ou NaN
-                        if pd.isna(value) or str(value).strip() == "" or str(value).lower() == "nan":
-                            st.markdown('<div class="article-field-empty">Donnée non renseignée</div>', unsafe_allow_html=True)
-                        else:
-                            display_value = str(value)
-                            # Utiliser un fond légèrement coloré pour améliorer la lisibilité
-                            st.markdown(f'<div class="article-field-value">{display_value}</div>', unsafe_allow_html=True)
+                with col_title:
+                    st.markdown(f"## 📄 Détails de l'article - {st.session_state.selected_article_index}")
 
-                        # Ligne de séparation
-                        st.markdown("---")
+                with col_close:
+                    if st.button("❌ Fermer", use_container_width=True):
+                        st.session_state.show_article = False
+                        st.session_state.selected_article_index = None
+                        st.rerun()
 
-        except IndexError:
-            st.error("❌ Article non trouvé dans les résultats.")
-        except Exception as e:
-            st.error(f"❌ Erreur lors de l'affichage de l'article : {e}")
+                # Conteneur avec barre de défilement
+                with st.container():
+                    # Afficher toutes les colonnes du DataFrame
+                    all_columns = list(df.columns)
 
-else:
-    st.info("ℹ️ Aucun résultat trouvé avec les critères sélectionnés.")
+                    for col in all_columns:
+                        if col in article_row.index:
+                            # Titre du champ (en rouge)
+                            st.markdown(f'<div class="article-field-label">{col}</div>', unsafe_allow_html=True)
 
-    # Suggestions pour améliorer la recherche
-    with st.expander("💡 Conseils pour améliorer votre recherche", expanded=False):
-        st.write("• Essayez de réduire le nombre de filtres appliqués")
-        st.write("• Vérifiez l'orthographe de vos termes de recherche")
-        st.write("• Utilisez des mots-clés plus généraux")
-        st.write("• Cliquez sur 'Rechercher' avec moins de filtres pour voir plus de projets")
+                            # Valeur du champ
+                            value = article_row[col]
+
+                            # Vérifier si la valeur est vide ou NaN
+                            if pd.isna(value) or str(value).strip() == "" or str(value).lower() == "nan":
+                                st.markdown('<div class="article-field-empty">Donnée non renseignée</div>', unsafe_allow_html=True)
+                            else:
+                                display_value = str(value)
+                                # Utiliser un fond légèrement coloré pour améliorer la lisibilité
+                                st.markdown(f'<div class="article-field-value">{display_value}</div>', unsafe_allow_html=True)
+
+                            # Ligne de séparation
+                            st.markdown("---")
+
+            except IndexError:
+                st.error("❌ Article non trouvé dans les résultats.")
+            except Exception as e:
+                st.error(f"❌ Erreur lors de l'affichage de l'article : {e}")
+
+    else:
+        st.info("ℹ️ Aucun résultat trouvé avec les critères sélectionnés.")
+
+        # Suggestions pour améliorer la recherche
+        with st.expander("💡 Conseils pour améliorer votre recherche", expanded=False):
+            st.write("• Essayez de réduire le nombre de filtres appliqués")
+            st.write("• Vérifiez l'orthographe de vos termes de recherche")
+            st.write("• Utilisez des mots-clés plus généraux")
+            st.write("• Cliquez sur 'Rechercher' avec moins de filtres pour voir plus de projets")
 
 else:
     # Message d'accueil quand aucune recherche n'a été effectuée
