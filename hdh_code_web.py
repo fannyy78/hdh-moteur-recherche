@@ -103,8 +103,7 @@ def load_data():
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
         }
-        
-        st.info("🔄 Récupération de la page HDH...")
+    
         
         # Récupérer la page avec session pour maintenir les cookies
         session = requests.Session()
@@ -118,7 +117,6 @@ def load_data():
         download_link = None
         
         # Stratégie 1: Chercher les liens avec des mots-clés dans le texte
-        st.info("🔍 Recherche du lien de téléchargement...")
         
         # Rechercher tous les liens
         all_links = soup.find_all('a', href=True)
@@ -180,8 +178,7 @@ def load_data():
             download_link = "https://www.health-data-hub.fr" + download_link
         elif not download_link.startswith('http'):
             download_link = "https://www.health-data-hub.fr/" + download_link.lstrip('/')
-        
-        st.info(f"📥 Téléchargement depuis: {download_link}")
+    
         
         # Télécharger le fichier Excel
         excel_response = session.get(download_link, headers=headers, timeout=60)
@@ -1084,5 +1081,6 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
 
 
