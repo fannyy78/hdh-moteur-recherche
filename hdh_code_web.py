@@ -130,7 +130,6 @@ def load_data():
             # Vérifier si c'est un fichier Excel
             if any(ext in href.lower() for ext in ['.xlsx', '.xls']):
                 download_link = href
-                st.info(f"✅ Lien Excel trouvé par extension: {href}")
                 break
             
             # Vérifier si le texte contient des mots-clés de téléchargement
@@ -1085,4 +1084,5 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
 
