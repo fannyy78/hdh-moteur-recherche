@@ -596,6 +596,8 @@ if 'show_article' not in st.session_state:
     st.session_state.show_article = False
 if 'selected_article_index' not in st.session_state:
     st.session_state.selected_article_index = None
+if 'trigger_search' not in st.session_state:
+    st.session_state.trigger_search = False
 
 # ==================== FONCTION DE FILTRAGE ====================
 def get_filtered_df(query_global, selected_types, selected_aires, selected_sources, 
@@ -696,7 +698,8 @@ query_global = st.text_input(
     "Recherche globale dans toutes les colonnes", 
     placeholder="Entrez un mot-clé...", 
     key="search_global",
-    value=st.session_state.get("search_global", "")
+    value=st.session_state.get("search_global", ""),
+    on_change=lambda: st.session_state.update({"trigger_search": True})
 )
 
 st.markdown("---")
@@ -857,7 +860,10 @@ st.markdown("---")
 col_btn1, col_btn2 = st.columns(2)
 
 with col_btn1:
-    if st.button("🔍 Rechercher", type="primary", use_container_width=True):
+    # Déclencher la recherche si le bouton est cliqué OU si trigger_search est activé
+    trigger_search = st.button("🔍 Rechercher", type="primary", use_container_width=True)
+    
+    if trigger_search or st.session_state.get("trigger_search", False):
         filtered_df = get_filtered_df(
             query_global, selected_types, selected_aires, selected_sources,
             selected_finalites, selected_objectifs, entite_responsable, 
@@ -865,6 +871,8 @@ with col_btn1:
         )
         st.session_state.current_results = filtered_df
         st.session_state.show_article = False
+        # Réinitialiser le trigger
+        st.session_state.trigger_search = False
 
 with col_btn2:
     if st.session_state.current_results is not None and not st.session_state.current_results.empty:
@@ -1081,6 +1089,7 @@ st.markdown("""
     <p style='font-size: 0.8rem;'>Compatible avec les thèmes clair et sombre</p>
 </div>
 """, unsafe_allow_html=True)
+
 
 
 
